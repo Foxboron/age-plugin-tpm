@@ -24,7 +24,22 @@ the follow go command.
 
 `go install github.com/Foxboron/age-plugin-tpm@latest`
 
-## Usage
+
+# Usage
+
+```bash
+# Create indetity
+$ age-plugin-tpm --generate-key
+$ age-plugin-tpm --identity > age-identity.txt
+$ age-plugin-tpm --list > age-recipient.txt
+
+# Encrypt / Decrypt something
+$ echo "Hack The Planet!" | age -R ./age-recipient.txt -o test-decrypt.txt
+$ age --decrypt -i ./age-identity.txt -o - test-decrypt.txt
+Hack The Planet!
+```
+
+## Commands
 
 An age identity can be created with:
 
