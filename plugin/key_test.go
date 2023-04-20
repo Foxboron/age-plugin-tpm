@@ -10,7 +10,7 @@ var data = []struct {
 	t   *Key
 }{
 	{
-		key: "AGE-PLUGIN-TPM1QXQSQQQPHUH2ES",
+		key: "AGE-PLUGIN-TPM-1QXQSQQQPCTWLLV",
 		t: &Key{
 			Version: 1,
 			Handle:  0x81000001,
