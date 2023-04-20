@@ -48,8 +48,8 @@ func (k *Key) HandleToString() string {
 
 func (k *Key) Serialize() []any {
 	return []interface{}{
-		k.Version,
-		k.Handle,
+		&k.Version,
+		&k.Handle,
 	}
 }
 
@@ -63,11 +63,10 @@ func DecodeKey(s string) (*Key, error) {
 		return nil, fmt.Errorf("invalid hrp")
 	}
 	r := bytes.NewBuffer(b)
-	if err := binary.Read(r, binary.BigEndian, &key.Version); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.BigEndian, &key.Handle); err != nil {
-		return nil, err
+	for _, f := range key.Serialize() {
+		if err := binary.Read(r, binary.BigEndian, f); err != nil {
+			return nil, err
+		}
 	}
 	return &key, nil
 }
