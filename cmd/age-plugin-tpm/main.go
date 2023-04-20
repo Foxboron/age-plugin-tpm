@@ -13,7 +13,6 @@ import (
 	"github.com/foxboron/age-plugin-tpm/plugin"
 	"github.com/foxboron/swtpm_test"
 	"github.com/google/go-tpm/tpm2"
-	"github.com/google/go-tpm/tpmutil"
 	"github.com/spf13/cobra"
 )
 
@@ -90,7 +89,8 @@ func RunCli() error {
 	}
 	defer tpm.Close()
 
-	if pluginOptions.GenerateKey {
+	switch {
+	case pluginOptions.GenerateKey:
 		k, err := plugin.CreateKey(tpm)
 		if err != nil {
 			return err
@@ -108,8 +108,8 @@ func RunCli() error {
 				return err
 			}
 		}
-	}
-	if pluginOptions.List {
+
+	case pluginOptions.List:
 		keys, err := plugin.GetSavedKeys()
 		if err != nil {
 			return err
@@ -122,10 +122,8 @@ func RunCli() error {
 				return err
 			}
 		}
-		return nil
-	}
 
-	if pluginOptions.Identities {
+	case pluginOptions.Identities:
 		keys, err := plugin.GetSavedKeys()
 		if err != nil {
 			return err
@@ -138,20 +136,8 @@ func RunCli() error {
 				return err
 			}
 		}
-		return nil
-	}
-	// TODO: we need to figure this out later
-	// this doesn't actually work with age
-	if pluginOptions.Decrypt {
-		var handle tpmutil.Handle = 0x81000004
-		file := "test-decrypt.txt"
-		return plugin.Decrypt(tpm, handle, file)
-	}
-	if pluginOptions.Encrypt {
-		var handle tpmutil.Handle = 0x81000004
-		return plugin.Encrypt(tpm, handle)
-	}
-	if pluginOptions.DeleteHandle {
+
+	case pluginOptions.DeleteHandle:
 		if pluginOptions.Handle != "" {
 			return fmt.Errorf("need to specify --handle before using --delete")
 		}
@@ -162,6 +148,7 @@ func RunCli() error {
 		if err := plugin.DeleteKey(tpm, handle); err != nil {
 			return fmt.Errorf("failed deleting key: %v", err)
 		}
+		return nil
 	}
 	return nil
 }
