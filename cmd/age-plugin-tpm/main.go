@@ -71,7 +71,7 @@ func SetLogger() {
 	plugin.SetLogger(w)
 }
 
-func RunCli() error {
+func RunCli(cmd *cobra.Command) error {
 	var err error
 	var swtpm *swtpm_test.Swtpm
 	if pluginOptions.SwTPM {
@@ -149,6 +149,8 @@ func RunCli() error {
 			return fmt.Errorf("failed deleting key: %v", err)
 		}
 		return nil
+	default:
+		return cmd.Help()
 	}
 	return nil
 }
@@ -311,7 +313,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 		plugin.Log.Println("Got identity-v1")
 		return RunIdentityV1()
 	default:
-		return RunCli()
+		return RunCli(cmd)
 	}
 }
 
