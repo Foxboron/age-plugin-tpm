@@ -27,7 +27,6 @@ func EncodeRecipient(handle tpmutil.Handle, pubkey *rsa.PublicKey) (string, erro
 }
 
 func DecodeRecipient(s string) (tpmutil.Handle, *rsa.PublicKey, error) {
-	Log.Printf("'%s'\n", s)
 	hrp, b, err := bech32.Decode(s)
 	if err != nil {
 		return 0, nil, fmt.Errorf("DecodeRecipinet: failed to decode bech32: %v", err)
