@@ -35,7 +35,7 @@ func GetSavedKeys() (Keys, error) {
 		if err := os.MkdirAll(GetCacheDir(), 0755); err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(config, []byte(""), 0644); err != nil {
+		if err := os.WriteFile(GetConfigFile(), []byte(""), 0644); err != nil {
 			return keys, err
 		}
 		return keys, nil
