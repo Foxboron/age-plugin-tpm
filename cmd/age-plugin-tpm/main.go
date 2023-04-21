@@ -158,7 +158,7 @@ func RunCli(cmd *cobra.Command) error {
 		}
 
 	case pluginOptions.DeleteHandle:
-		if pluginOptions.Handle != "" {
+		if pluginOptions.Handle == "" {
 			return fmt.Errorf("need to specify --handle before using --delete")
 		}
 		handle, err := plugin.StringToHandle(pluginOptions.Handle)
