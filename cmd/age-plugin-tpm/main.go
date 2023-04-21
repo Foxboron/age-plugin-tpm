@@ -48,7 +48,6 @@ var (
 		Example: example,
 		RunE:    RunPlugin,
 	}
-	tpmPath = "/dev/tpm0"
 )
 
 func SetupSwtpm() *swtpm_test.Swtpm {
@@ -57,6 +56,26 @@ func SetupSwtpm() *swtpm_test.Swtpm {
 		os.MkdirTemp("/var/tmp", "age-plugin-tpm")
 	}
 	return swtpm_test.NewSwtpm(dir)
+}
+
+func OpenTPM(path string) (io.ReadWriteCloser, error) {
+	if path != "" {
+		if tpm, err := tpm2.OpenTPM(path); err != nil {
+			return nil, err
+		} else {
+			return tpm, nil
+		}
+	}
+
+	// Backup method for the default case
+	for _, path := range []string{"/dev/tpmrm0", "/dev/tpm0"} {
+		tpm, err := tpm2.OpenTPM(path)
+		if err != nil {
+			continue
+		}
+		return tpm, nil
+	}
+	return nil, fmt.Errorf("failed opening a TPM device")
 }
 
 func SetLogger() {
@@ -73,6 +92,7 @@ func SetLogger() {
 
 func RunCli(cmd *cobra.Command) error {
 	var err error
+	var tpmPath string
 	var swtpm *swtpm_test.Swtpm
 	if pluginOptions.SwTPM {
 		swtpm = SetupSwtpm()
@@ -83,7 +103,7 @@ func RunCli(cmd *cobra.Command) error {
 		defer swtpm.Stop()
 	}
 
-	tpm, err := tpm2.OpenTPM(tpmPath)
+	tpm, err := OpenTPM(tpmPath)
 	if err != nil {
 		return err
 	}
@@ -227,6 +247,7 @@ parser:
 
 func RunIdentityV1() error {
 	var swtpm *swtpm_test.Swtpm
+	var tpmPath string
 	var err error
 	if pluginOptions.SwTPM {
 		swtpm = SetupSwtpm()
@@ -237,7 +258,7 @@ func RunIdentityV1() error {
 		defer swtpm.Stop()
 	}
 
-	tpm, err := tpm2.OpenTPM(tpmPath)
+	tpm, err := OpenTPM(tpmPath)
 	if err != nil {
 		plugin.Log.Printf("OpenTPM err")
 		return err
