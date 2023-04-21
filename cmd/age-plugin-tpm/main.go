@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/foxboron/age-plugin-tpm/plugin"
@@ -41,6 +43,7 @@ var example = `
   Hello World`
 
 var (
+	swtpmPath     = "/var/tmp/age-plugin-tpm"
 	pluginOptions = PluginOptions{}
 	rootCmd       = &cobra.Command{
 		Use:     "age-plugin-tpm",
@@ -51,11 +54,10 @@ var (
 )
 
 func SetupSwtpm() *swtpm_test.Swtpm {
-	dir := "/var/tmp/age-plugin-tpm"
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		os.MkdirTemp("/var/tmp", "age-plugin-tpm")
+	if _, err := os.Stat(swtpmPath); errors.Is(err, os.ErrNotExist) {
+		os.MkdirTemp(path.Dir(swtpmPath), path.Base(swtpmPath))
 	}
-	return swtpm_test.NewSwtpm(dir)
+	return swtpm_test.NewSwtpm(swtpmPath)
 }
 
 func OpenTPM(path string) (io.ReadWriteCloser, error) {
