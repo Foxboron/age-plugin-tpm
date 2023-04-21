@@ -192,12 +192,12 @@ func b64Encode(s []byte) string {
 	return base64.RawStdEncoding.Strict().EncodeToString(s)
 }
 
-func RunRecipientV1() error {
+func RunRecipientV1(stdin io.Reader, stdout io.StringWriter) error {
 	// TODO: Reimplement once we have a proper implementation from upstream
 	var entry string
 	var key string
 	recipients := []string{}
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(stdin)
 parser:
 	for scanner.Scan() {
 		entry = scanner.Text()
@@ -234,7 +234,7 @@ parser:
 				return err
 			}
 
-			os.Stdout.WriteString("-> recipient-stanza 0 tpm-rsa\n")
+			stdout.WriteString("-> recipient-stanza 0 tpm-rsa\n")
 
 			// We can only write 48 bytes pr line
 			// chunk the output before b64 encoding it
@@ -244,17 +244,17 @@ parser:
 					break
 				}
 				b := r.Next(48)
-				os.Stdout.WriteString(b64Encode(b) + "\n")
+				stdout.WriteString(b64Encode(b) + "\n")
 			}
 		case "done":
-			os.Stdout.WriteString("-> done\n\n")
+			stdout.WriteString("-> done\n\n")
 			break parser
 		}
 	}
 	return nil
 }
 
-func RunIdentityV1() error {
+func RunIdentityV1(stdin io.Reader, stdout io.StringWriter) error {
 	var swtpm *swtpm_test.Swtpm
 	var tpmPath string
 	var err error
@@ -276,7 +276,7 @@ func RunIdentityV1() error {
 
 	var entry string
 	identities := []string{}
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(stdin)
 parser:
 	for scanner.Scan() {
 		entry = scanner.Text()
@@ -319,15 +319,15 @@ parser:
 			if err != nil {
 				return err
 			}
-			os.Stdout.WriteString("-> file-key 0\n")
-			os.Stdout.WriteString(b64Encode(key) + "\n")
+			stdout.WriteString("-> file-key 0\n")
+			stdout.WriteString(b64Encode(key) + "\n")
 		case "done":
 			// Age kills us off too quickly to properly shut down swtpm, so do this before returning.
 			tpm.Close()
 			if pluginOptions.SwTPM {
 				swtpm.Stop()
 			}
-			os.Stdout.WriteString("-> done\n\n")
+			stdout.WriteString("-> done\n\n")
 			break parser
 		}
 	}
@@ -338,10 +338,10 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 	switch pluginOptions.AgePlugin {
 	case "recipient-v1":
 		plugin.Log.Println("Got recipient-v1")
-		return RunRecipientV1()
+		return RunRecipientV1(os.Stdin, os.Stdout)
 	case "identity-v1":
 		plugin.Log.Println("Got identity-v1")
-		return RunIdentityV1()
+		return RunIdentityV1(os.Stdin, os.Stdout)
 	default:
 		return RunCli(cmd)
 	}
