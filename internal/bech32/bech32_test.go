@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"filippo.io/age/internal/bech32"
+	"github.com/foxboron/age-plugin-tpm/internal/bech32"
 )
 
 func TestBech32(t *testing.T) {
