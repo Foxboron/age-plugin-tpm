@@ -79,7 +79,7 @@ func CreateKey(tpm io.ReadWriteCloser) (*Key, error) {
 		return nil, fmt.Errorf("failed EvictControl: %v", err)
 	}
 
-	pk := GetKey(tpm, localHandle)
+	pk := GetPubKey(tpm, localHandle)
 	s, err := EncodeRecipient(localHandle, pk)
 	if err != nil {
 		return nil, err
@@ -116,7 +116,7 @@ func HasKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) bool {
 	return true
 }
 
-func GetKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) *rsa.PublicKey {
+func GetPubKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) *rsa.PublicKey {
 	pub, _, _, err := tpm2.ReadPublic(tpm, handle)
 	if err != nil {
 		log.Fatal(err)
@@ -140,7 +140,7 @@ func DecryptTPM(tpm io.ReadWriteCloser, handle tpmutil.Handle, fileKey []byte) (
 	return fileKey, nil
 }
 
-func DeleteKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) error {
+func DeleteHandle(tpm io.ReadWriteCloser, handle tpmutil.Handle) error {
 	if err := tpm2.EvictControl(tpm, "", tpm2.HandleOwner, handle, handle); err != nil {
 		return fmt.Errorf("failed EvictControl: %v", err)
 	}
