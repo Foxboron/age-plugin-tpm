@@ -168,6 +168,13 @@ func RunCli(cmd *cobra.Command) error {
 		if err := plugin.DeleteHandle(tpm, handle); err != nil {
 			return fmt.Errorf("failed deleting key: %v", err)
 		}
+		k, err := plugin.GetKey(handle)
+		if err != nil {
+			return err
+		}
+		if err := plugin.DeleteKey(k); err != nil {
+			return fmt.Errorf("failed deleting key: %v", err)
+		}
 		return nil
 	default:
 		return cmd.Help()

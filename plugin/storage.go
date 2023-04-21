@@ -3,6 +3,7 @@ package plugin
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path"
 
@@ -45,6 +46,19 @@ func GetSavedKeys() (Keys, error) {
 	return keys, nil
 }
 
+func DeleteKey(k *Key) error {
+	keys, err := GetSavedKeys()
+	if err != nil {
+		return err
+	}
+	delete(keys, tpmutil.Handle(k.Handle))
+	b, err := json.Marshal(keys)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(GetConfigFile(), b, 0644)
+}
+
 func SaveKey(k *Key) error {
 	keys, err := GetSavedKeys()
 	if err != nil {
@@ -56,4 +70,16 @@ func SaveKey(k *Key) error {
 		return err
 	}
 	return os.WriteFile(GetConfigFile(), b, 0644)
+}
+
+func GetKey(handle tpmutil.Handle) (*Key, error) {
+	keys, err := GetSavedKeys()
+	if err != nil {
+		return nil, err
+	}
+	k, ok := keys[handle]
+	if !ok {
+		return nil, fmt.Errorf("can't find key with handle")
+	}
+	return k, nil
 }
