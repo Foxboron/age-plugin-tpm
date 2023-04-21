@@ -3,7 +3,7 @@ module github.com/foxboron/age-plugin-tpm
 go 1.20
 
 require (
-	github.com/foxboron/swtpm_test v0.0.0-20230409224532-24fe57a09238 // indirect
+	github.com/foxboron/swtpm_test v0.0.0-20230421224247-a63adf5f7589 // indirect
 	github.com/google/go-tpm v0.3.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
