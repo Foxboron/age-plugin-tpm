@@ -93,22 +93,6 @@ func CreateKey(tpm io.ReadWriteCloser) (*Key, error) {
 	}, nil
 }
 
-func PrintKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) error {
-	pub, _, _, err := tpm2.ReadPublic(tpm, localHandle)
-	if err != nil {
-		return fmt.Errorf("failed to ReadPublic: %v", err)
-	}
-	pubkey, err := pub.Key()
-	if err != nil {
-		return fmt.Errorf("failed getting key: %v", err)
-	}
-
-	rsaPubKey := pubkey.(*rsa.PublicKey)
-
-	fmt.Println(KeyToSSH(rsaPubKey))
-	return nil
-}
-
 func HasKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) bool {
 	if _, _, _, err := tpm2.ReadPublic(tpm, handle); err != nil {
 		return false

@@ -2,18 +2,15 @@ package plugin
 
 import (
 	"bytes"
-	"crypto/rsa"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/foxboron/age-plugin-tpm/internal/bech32"
 	"github.com/google/go-tpm/tpmutil"
-	"golang.org/x/crypto/ssh"
 )
 
 type PINStatus int64
@@ -83,15 +80,6 @@ func EncodeKey(k *Key) (string, error) {
 		return "", err
 	}
 	return s, nil
-}
-
-func KeyToSSH(r *rsa.PublicKey) string {
-	// TODO: We shouldn't be dealing with an incompatible SSH key
-	pk, err := ssh.NewPublicKey(r)
-	if err != nil {
-		log.Fatalf("KeyToSSH got an invalid key: %v", err)
-	}
-	return string(ssh.MarshalAuthorizedKey(pk))
 }
 
 var (
