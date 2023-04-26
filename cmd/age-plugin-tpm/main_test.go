@@ -8,25 +8,26 @@ import (
 	"testing"
 
 	"github.com/foxboron/age-plugin-tpm/plugin"
+	"github.com/google/go-tpm/tpmutil"
 	"github.com/spf13/cobra"
 )
 
-func Setup(t *testing.T) {
-	// Override the CLI swtpmPath to a test dir
-	swtpmPath = t.TempDir()
-
-	// Ensure we write the config.json to a temp directory
-	os.Setenv("XDG_CACHE_HOME", t.TempDir())
-	os.Setenv("AGE_PLUGIN_TPM_SWTPM", "1")
-	SetLogger()
-}
+var (
+	// TODO: Still an hardcoded handle
+	handle tpmutil.Handle = 0x81000004
+)
 
 func TestEncryptDecrypt(t *testing.T) {
-	Setup(t)
-
 	var wrappedKey string
 
-	fileKey := []byte("test")
+	os.Setenv("XDG_CACHE_HOME", t.TempDir())
+	SetLogger()
+
+	tpm, err := plugin.NewSwTPM(t.TempDir())
+	if err != nil {
+		t.Fatalf("failed opening tpm: %v", err)
+	}
+	defer tpm.Close()
 
 	t.Run("Generate key", func(t *testing.T) {
 		// Silence the key generation Marshal
@@ -37,16 +38,16 @@ func TestEncryptDecrypt(t *testing.T) {
 		// First generate a key
 		pluginOptions = PluginOptions{
 			GenerateKey: true,
-			// TODO: We need to do this elsewhere
-			SwTPM: true,
 		}
 
-		err := RunCli(&cobra.Command{})
+		err := RunCli(&cobra.Command{}, tpm.TPM())
 		os.Stdout = sout
 		if err != nil {
 			t.Fatalf("Failed generating keys")
 		}
 	})
+
+	fileKey := []byte("test")
 
 	t.Run("RunRecipientV1", func(t *testing.T) {
 		var stdin bytes.Buffer
@@ -93,7 +94,7 @@ func TestEncryptDecrypt(t *testing.T) {
 		stdin.WriteString(wrappedKey)
 		stdin.WriteString("-> done\n")
 
-		if err := RunIdentityV1(&stdin, &stdout); err != nil {
+		if err := RunIdentityV1(tpm.TPM(), &stdin, &stdout); err != nil {
 			t.Fatalf("Failed RunRecipientV1: %v", err)
 		}
 

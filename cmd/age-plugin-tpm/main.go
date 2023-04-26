@@ -4,17 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"path"
 	"strings"
 
 	"github.com/foxboron/age-plugin-tpm/plugin"
-	"github.com/foxboron/swtpm_test"
-	"github.com/google/go-tpm/tpm2"
 	"github.com/spf13/cobra"
 )
 
@@ -53,33 +49,6 @@ var (
 	}
 )
 
-func SetupSwtpm() *swtpm_test.Swtpm {
-	if _, err := os.Stat(swtpmPath); errors.Is(err, os.ErrNotExist) {
-		os.MkdirTemp(path.Dir(swtpmPath), path.Base(swtpmPath))
-	}
-	return swtpm_test.NewSwtpm(swtpmPath)
-}
-
-func OpenTPM(path string) (io.ReadWriteCloser, error) {
-	if path != "" {
-		if tpm, err := tpm2.OpenTPM(path); err != nil {
-			return nil, err
-		} else {
-			return tpm, nil
-		}
-	}
-
-	// Backup method for the default case
-	for _, path := range []string{"/dev/tpmrm0", "/dev/tpm0"} {
-		tpm, err := tpm2.OpenTPM(path)
-		if err != nil {
-			continue
-		}
-		return tpm, nil
-	}
-	return nil, fmt.Errorf("failed opening a TPM device")
-}
-
 func SetLogger() {
 	var w io.Writer
 	if pluginOptions.LogFile != "" {
@@ -92,25 +61,7 @@ func SetLogger() {
 	plugin.SetLogger(w)
 }
 
-func RunCli(cmd *cobra.Command) error {
-	var err error
-	var tpmPath string
-	var swtpm *swtpm_test.Swtpm
-	if pluginOptions.SwTPM {
-		swtpm = SetupSwtpm()
-		tpmPath, err = swtpm.Socket()
-		if err != nil {
-			return err
-		}
-		defer swtpm.Stop()
-	}
-
-	tpm, err := OpenTPM(tpmPath)
-	if err != nil {
-		return err
-	}
-	defer tpm.Close()
-
+func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser) error {
 	switch {
 	case pluginOptions.GenerateKey:
 		k, err := plugin.CreateKey(tpm)
@@ -254,26 +205,7 @@ parser:
 	return nil
 }
 
-func RunIdentityV1(stdin io.Reader, stdout io.StringWriter) error {
-	var swtpm *swtpm_test.Swtpm
-	var tpmPath string
-	var err error
-	if pluginOptions.SwTPM {
-		swtpm = SetupSwtpm()
-		tpmPath, err = swtpm.Socket()
-		if err != nil {
-			return err
-		}
-		defer swtpm.Stop()
-	}
-
-	tpm, err := OpenTPM(tpmPath)
-	if err != nil {
-		plugin.Log.Printf("OpenTPM err")
-		return err
-	}
-	defer tpm.Close()
-
+func RunIdentityV1(tpm io.ReadWriteCloser, stdin io.Reader, stdout io.StringWriter) error {
 	var entry string
 	identities := []string{}
 	scanner := bufio.NewScanner(stdin)
@@ -323,10 +255,6 @@ parser:
 			stdout.WriteString(b64Encode(key) + "\n")
 		case "done":
 			// Age kills us off too quickly to properly shut down swtpm, so do this before returning.
-			tpm.Close()
-			if pluginOptions.SwTPM {
-				swtpm.Stop()
-			}
 			stdout.WriteString("-> done\n\n")
 			break parser
 		}
@@ -335,15 +263,30 @@ parser:
 }
 
 func RunPlugin(cmd *cobra.Command, args []string) error {
+	var tpm *plugin.TPMDevice
+	var tpmPath string
+	var err error
+	if pluginOptions.SwTPM || os.Getenv("AGE_PLUGIN_TPM_SWTPM") != "" {
+		tpm, err = plugin.NewSwTPM(swtpmPath)
+	} else {
+		tpm, err = plugin.NewTPM(tpmPath)
+	}
+	if err != nil {
+		return err
+	}
+
+	tpm.Watch()
+	defer tpm.Close()
+
 	switch pluginOptions.AgePlugin {
 	case "recipient-v1":
 		plugin.Log.Println("Got recipient-v1")
 		return RunRecipientV1(os.Stdin, os.Stdout)
 	case "identity-v1":
 		plugin.Log.Println("Got identity-v1")
-		return RunIdentityV1(os.Stdin, os.Stdout)
+		return RunIdentityV1(tpm.TPM(), os.Stdin, os.Stdout)
 	default:
-		return RunCli(cmd)
+		return RunCli(cmd, tpm.TPM())
 	}
 }
 
@@ -377,9 +320,6 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 func main() {
 	SetLogger()
 	pluginFlags(rootCmd, &pluginOptions)
-	if os.Getenv("AGE_PLUGIN_TPM_SWTPM") != "" {
-		pluginOptions.SwTPM = true
-	}
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}
