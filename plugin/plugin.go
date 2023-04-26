@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/go-tpm/tpm2"
@@ -129,4 +131,20 @@ func DeleteHandle(tpm io.ReadWriteCloser, handle tpmutil.Handle) error {
 		return fmt.Errorf("failed EvictControl: %v", err)
 	}
 	return nil
+}
+
+func HandleToString(handle tpmutil.Handle) string {
+	return fmt.Sprintf("0x%x", handle)
+}
+
+func StringToHandle(handle string) (tpmutil.Handle, error) {
+	if !strings.HasPrefix(handle, "0x") {
+		return 0, fmt.Errorf("handle should be formatted as a hex-string with an 0x prefix")
+	}
+	hex := strings.TrimPrefix(handle, "0x")
+	value, err := strconv.ParseInt(hex, 16, 64)
+	if err != nil {
+		return 0, err
+	}
+	return tpmutil.Handle(value), nil
 }
