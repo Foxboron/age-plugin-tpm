@@ -180,12 +180,12 @@ parser:
 				return err
 			}
 
-			wrapped, err := plugin.WrapFileKey(fileKey, pubkey)
+			wrapped, sessionKey, err := plugin.WrapFileKey(fileKey, pubkey)
 			if err != nil {
 				return err
 			}
 
-			stdout.WriteString("-> recipient-stanza 0 tpm-rsa\n")
+			stdout.WriteString(fmt.Sprintf("-> recipient-stanza 0 tpm-ecc %s\n", b64Encode(sessionKey)))
 
 			// We can only write 48 bytes pr line
 			// chunk the output before b64 encoding it
@@ -225,6 +225,14 @@ parser:
 		case "recipient-stanza":
 			plugin.Log.Printf("recipieint-stanza: %s\n", cmd)
 
+			entry := scanner.Text()
+			entry = strings.TrimPrefix(entry, "-> ")
+			stanza := strings.Split(entry, " ")
+
+			sessionKey, err := b64Decode(stanza[3])
+			if err != nil {
+				return fmt.Errorf("failed base64 decode session key: %v", err)
+			}
 			// The bytes are truncated to 64 pr line
 			WrappedKeyS := ""
 			for scanner.Scan() {
@@ -238,7 +246,7 @@ parser:
 			plugin.Log.Printf("read wrapped key: %s", WrappedKeyS)
 			wrappedKey, err := b64Decode(WrappedKeyS)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed base64 decode wrappedKey: %v", err)
 			}
 
 			identity := identities[0]
@@ -247,7 +255,7 @@ parser:
 				return err
 			}
 
-			key, err := plugin.DecryptTPM(tpm, k.Handle, wrappedKey)
+			key, err := plugin.DecryptTPM(tpm, k.Handle, sessionKey, wrappedKey)
 			if err != nil {
 				return err
 			}

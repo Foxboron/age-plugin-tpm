@@ -19,6 +19,7 @@ var (
 
 func TestEncryptDecrypt(t *testing.T) {
 	var wrappedKey string
+	var sessionKey string
 
 	os.Setenv("XDG_CACHE_HOME", t.TempDir())
 	SetLogger()
@@ -53,33 +54,30 @@ func TestEncryptDecrypt(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
-		s := b64Encode(fileKey)
-
-		key, err := plugin.GetKey(0x81000004)
+		key, err := plugin.GetKey(handle)
 		if err != nil {
 			t.Fatalf("Failed GetKey: %v", err)
 		}
 		stdin.WriteString("-> add-recipient ")
 		stdin.WriteString(key.Recipient + "\n")
 		stdin.WriteString("-> wrap-file-key\n")
-		stdin.WriteString(s + "\n")
+		stdin.WriteString(b64Encode(fileKey) + "\n")
 		stdin.WriteString("-> done\n")
 		if err := RunRecipientV1(&stdin, &stdout); err != nil {
 			t.Fatalf("Failed RunRecipientV1: %v", err)
 		}
-
 		// TODO: Better parsing
 		output := strings.TrimSpace(stdout.String())
-		output = strings.ReplaceAll(output, "-> recipient-stanza 0 tpm-rsa\n", "")
-		output = strings.ReplaceAll(output, "-> done", "")
-		wrappedKey = output
+		lines := strings.Split(output, "\n")
+		wrappedKey = strings.TrimSpace(lines[1])
+		sessionKey = strings.Split(lines[0], " ")[4]
 	})
 
 	t.Run("RunIdentitiyv1", func(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
-		key, err := plugin.GetKey(0x81000004)
+		key, err := plugin.GetKey(handle)
 		if err != nil {
 			t.Fatalf("Failed GetKey: %v", err)
 		}
@@ -90,8 +88,8 @@ func TestEncryptDecrypt(t *testing.T) {
 		}
 
 		stdin.WriteString(fmt.Sprintf("-> add-identity %s\n", identity))
-		stdin.WriteString("-> recipient-stanza 0 tpm-rsa\n")
-		stdin.WriteString(wrappedKey)
+		stdin.WriteString(fmt.Sprintf("-> recipient-stanza 0 tpm-ecc %s\n", sessionKey))
+		stdin.WriteString(wrappedKey + "\n")
 		stdin.WriteString("-> done\n")
 
 		if err := RunIdentityV1(tpm.TPM(), &stdin, &stdout); err != nil {

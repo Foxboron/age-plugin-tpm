@@ -2,31 +2,31 @@ package plugin
 
 import (
 	"bytes"
+	"crypto/ecdh"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/big"
 
 	"github.com/foxboron/age-plugin-tpm/internal/bech32"
 	"github.com/google/go-tpm/tpmutil"
+	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/hkdf"
 )
 
 // TODO: This should be extended with a struct
 //       Optionally with a reserved field so we could implement
 //       other key-types in the future
 
-func EncodeRecipient(handle tpmutil.Handle, pubkey *rsa.PublicKey) (string, error) {
+func EncodeRecipient(handle tpmutil.Handle, pubkey *ecdh.PublicKey) (string, error) {
 	var b bytes.Buffer
 	binary.Write(&b, binary.BigEndian, handle)
-	binary.Write(&b, binary.BigEndian, int64(pubkey.E))
-	binary.Write(&b, binary.BigEndian, pubkey.N.Bytes())
+	binary.Write(&b, binary.BigEndian, pubkey.Bytes())
 	return bech32.Encode(RecipientPrefix, b.Bytes())
 }
 
-func DecodeRecipient(s string) (tpmutil.Handle, *rsa.PublicKey, error) {
+func DecodeRecipient(s string) (tpmutil.Handle, *ecdh.PublicKey, error) {
 	hrp, b, err := bech32.Decode(s)
 	if err != nil {
 		return 0, nil, fmt.Errorf("DecodeRecipinet: failed to decode bech32: %v", err)
@@ -43,33 +43,47 @@ func DecodeRecipient(s string) (tpmutil.Handle, *rsa.PublicKey, error) {
 		return 0, nil, err
 	}
 
-	var E int64
-	if err := binary.Read(r, binary.BigEndian, &E); err != nil {
-		return handle, &rsa.PublicKey{}, err
-	}
-
 	var bb bytes.Buffer
 	io.Copy(&bb, r)
-	N := new(big.Int).SetBytes(bb.Bytes())
-	return handle, &rsa.PublicKey{
-		N: N,
-		E: int(E),
-	}, nil
+	ecdhKey, err := ecdh.P256().NewPublicKey(bb.Bytes())
+	if err != nil {
+		return handle, nil, err
+	}
+
+	return handle, ecdhKey, nil
 }
 
-// oaep label for the plugin itself
-const oaepTPMLabel = "age-encryption.org/v1/ssh-tpm"
+const p256Label = "age-encryption.org/v1/tpm-p256"
 
-func WrapFileKey(fileKey []byte, pubkey *rsa.PublicKey) ([]byte, error) {
+// Wraps the file key in a session key
+// Returns  the sealed filekey, the session pubkey bytes, error
+func WrapFileKey(fileKey []byte, pubkey *ecdh.PublicKey) ([]byte, []byte, error) {
 
-	label := []byte(oaepTPMLabel)
-	// append a null byte to the label, as it is what the TPM requires
-	label = append(label, 0)
+	sessionKey, _ := ecdh.P256().GenerateKey(rand.Reader)
+	sessionPubKey := sessionKey.PublicKey()
 
-	wrappedKey, err := rsa.EncryptOAEP(sha256.New(), rand.Reader,
-		pubkey, fileKey, label)
+	shared, err := sessionKey.ECDH(pubkey)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return wrappedKey, nil
+
+	ourKey := sessionPubKey.Bytes()
+	theirKey := pubkey.Bytes()
+
+	salt := make([]byte, 0, len(ourKey)+len(theirKey))
+	salt = append(salt, ourKey...)
+	salt = append(salt, theirKey...)
+
+	h := hkdf.New(sha256.New, shared[:], salt, []byte(p256Label))
+	wrappingKey := make([]byte, chacha20poly1305.KeySize)
+	if _, err := io.ReadFull(h, wrappingKey); err != nil {
+		return nil, nil, err
+	}
+
+	aead, err := chacha20poly1305.New(wrappingKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	nonce := make([]byte, chacha20poly1305.NonceSize)
+	return aead.Seal(nil, nonce, fileKey, nil), sessionPubKey.Bytes(), nil
 }

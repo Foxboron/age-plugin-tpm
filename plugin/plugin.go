@@ -1,7 +1,10 @@
 package plugin
 
 import (
-	"crypto/rsa"
+	"crypto/ecdh"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -11,6 +14,8 @@ import (
 
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpmutil"
+	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/hkdf"
 )
 
 const (
@@ -29,30 +34,33 @@ var (
 	localHandle tpmutil.Handle = 0x81000004
 
 	srkTemplate = tpm2.Public{
-		Type:       tpm2.AlgRSA,
+		Type:       tpm2.AlgECC,
 		NameAlg:    tpm2.AlgSHA256,
-		Attributes: tpm2.FlagFixedTPM | tpm2.FlagFixedParent | tpm2.FlagSensitiveDataOrigin | tpm2.FlagUserWithAuth | tpm2.FlagRestricted | tpm2.FlagDecrypt | tpm2.FlagNoDA,
-		RSAParameters: &tpm2.RSAParams{
+		Attributes: tpm2.FlagStorageDefault | tpm2.FlagNoDA,
+		ECCParameters: &tpm2.ECCParams{
 			Symmetric: &tpm2.SymScheme{
 				Alg:     tpm2.AlgAES,
 				KeyBits: 128,
 				Mode:    tpm2.AlgCFB,
 			},
-			KeyBits:    2048,
-			ModulusRaw: make([]byte, 256),
+			CurveID: tpm2.CurveNISTP256,
+			Point: tpm2.ECPoint{
+				XRaw: make([]byte, 32),
+				YRaw: make([]byte, 32),
+			},
 		},
 	}
 
-	rsaKeyParamsDecrypt = tpm2.Public{
-		Type:       tpm2.AlgRSA,
+	eccKeyParamsDecrypt = tpm2.Public{
+		Type:       tpm2.AlgECC,
 		NameAlg:    tpm2.AlgSHA256,
 		Attributes: tpm2.FlagStorageDefault & ^tpm2.FlagRestricted,
-		RSAParameters: &tpm2.RSAParams{
-			Sign: &tpm2.SigScheme{
-				Alg:  tpm2.AlgOAEP,
-				Hash: tpm2.AlgSHA256,
+		ECCParameters: &tpm2.ECCParams{
+			CurveID: tpm2.CurveNISTP256,
+			Point: tpm2.ECPoint{
+				XRaw: make([]byte, 32),
+				YRaw: make([]byte, 32),
 			},
-			KeyBits: 2048,
 		},
 	}
 )
@@ -68,7 +76,7 @@ func CreateKey(tpm io.ReadWriteCloser) (*Key, error) {
 		}
 	}
 
-	priv, pub, _, _, _, err := tpm2.CreateKey(tpm, srkHandle, tpm2.PCRSelection{}, "", "", rsaKeyParamsDecrypt)
+	priv, pub, _, _, _, err := tpm2.CreateKey(tpm, srkHandle, tpm2.PCRSelection{}, "", "", eccKeyParamsDecrypt)
 	if err != nil {
 		return nil, fmt.Errorf("failed CreateKey: %v", err)
 	}
@@ -102,28 +110,66 @@ func HasKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) bool {
 	return true
 }
 
-func GetPubKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) *rsa.PublicKey {
+func GetPubKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) *ecdh.PublicKey {
 	pub, _, _, err := tpm2.ReadPublic(tpm, handle)
 	if err != nil {
 		log.Fatal(err)
 	}
 	pubkey, _ := pub.Key()
+	ecKey, err := pubkey.(*ecdsa.PublicKey).ECDH()
+	if err != nil {
+		log.Fatalf("failed creating ECDH key from tpm: %v", err)
+	}
 
-	return pubkey.(*rsa.PublicKey)
+	return ecKey
 }
 
 func GetTPM(tpm io.ReadWriteCloser) {
 	tpm2.GetCapability(tpm, tpm2.CapabilityTPMProperties, 1, uint32(tpm2.FirmwareVersion1))
 }
 
-func DecryptTPM(tpm io.ReadWriteCloser, handle tpmutil.Handle, fileKey []byte) ([]byte, error) {
-	scheme := &tpm2.AsymScheme{Alg: tpm2.AlgOAEP, Hash: tpm2.AlgSHA256}
-	fileKey, err := tpm2.RSADecrypt(tpm, handle, "", fileKey, scheme, oaepTPMLabel)
+func DecryptTPM(tpm io.ReadWriteCloser, handle tpmutil.Handle, remoteKey []byte, fileKey []byte) ([]byte, error) {
+
+	sessionKey, err := ecdh.P256().NewPublicKey(remoteKey)
+	if err != nil {
+		return nil, err
+	}
+
+	x, y := elliptic.Unmarshal(elliptic.P256(), sessionKey.Bytes())
+	sharedSecret, err := tpm2.ECDHZGen(tpm, handle, "",
+		tpm2.ECPoint{XRaw: x.Bytes(), YRaw: y.Bytes()})
+	if err != nil {
+		return nil, err
+	}
+
+	ourKey := GetPubKey(tpm, handle).Bytes()
+	theirKey := sessionKey.Bytes()
+
+	salt := make([]byte, 0, len(theirKey)+len(ourKey))
+	salt = append(salt, theirKey...)
+	salt = append(salt, ourKey...)
+
+	h := hkdf.New(sha256.New, sharedSecret.X().Bytes(), salt, []byte(p256Label))
+	wrappingKey := make([]byte, chacha20poly1305.KeySize)
+	if _, err := io.ReadFull(h, wrappingKey); err != nil {
+		return nil, err
+	}
+
+	aead, err := chacha20poly1305.New(wrappingKey)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, chacha20poly1305.NonceSize)
+
+	decrypted, err := aead.Open(nil, nonce, fileKey, nil)
+	if err != nil {
+		return nil, err
+	}
 	if err != nil {
 		return []byte{}, err
 	}
 
-	return fileKey, nil
+	return decrypted, nil
 }
 
 func DeleteHandle(tpm io.ReadWriteCloser, handle tpmutil.Handle) error {
