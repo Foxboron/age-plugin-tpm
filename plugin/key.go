@@ -29,7 +29,7 @@ func (p PINStatus) String() string {
 	return "Not a PINStatus"
 }
 
-type Key struct {
+type Identity struct {
 	Version   uint8          `json:"version"`
 	Handle    tpmutil.Handle `json:"handle"`
 	PIN       PINStatus      `json:"pin"`
@@ -38,19 +38,19 @@ type Key struct {
 	Recipient string         `json:"recipient"`
 }
 
-func (k *Key) HandleToString() string {
-	return HandleToString(k.Handle)
+func (i *Identity) HandleToString() string {
+	return HandleToString(i.Handle)
 }
 
-func (k *Key) Serialize() []any {
+func (i *Identity) Serialize() []any {
 	return []interface{}{
-		&k.Version,
-		&k.Handle,
+		&i.Version,
+		&i.Handle,
 	}
 }
 
-func DecodeKey(s string) (*Key, error) {
-	var key Key
+func DecodeIdentity(s string) (*Identity, error) {
+	var key Identity
 	hrp, b, err := bech32.Decode(s)
 	if err != nil {
 		return nil, err
@@ -67,9 +67,9 @@ func DecodeKey(s string) (*Key, error) {
 	return &key, nil
 }
 
-func EncodeKey(k *Key) (string, error) {
+func EncodeIdentity(i *Identity) (string, error) {
 	var b bytes.Buffer
-	for _, v := range k.Serialize() {
+	for _, v := range i.Serialize() {
 		if err := binary.Write(&b, binary.BigEndian, v); err != nil {
 			return "", err
 		}
@@ -82,31 +82,31 @@ func EncodeKey(k *Key) (string, error) {
 }
 
 var (
-	keyText = `
+	marshalTemplate = `
 # Handle: %s
 # Created: %s
 `
 )
 
-func Marshal(k *Key, w io.Writer) {
-	s := fmt.Sprintf(keyText, k.HandleToString(), k.Created)
+func Marshal(i *Identity, w io.Writer) {
+	s := fmt.Sprintf(marshalTemplate, i.HandleToString(), i.Created)
 	s = strings.TrimSpace(s)
 	fmt.Fprintf(w, "%s\n", s)
 }
 
-func MarshalIdentity(k *Key, w io.Writer) error {
-	key, err := EncodeKey(k)
+func MarshalIdentity(i *Identity, w io.Writer) error {
+	key, err := EncodeIdentity(i)
 	if err != nil {
 		return err
 	}
-	Marshal(k, w)
-	fmt.Fprintf(w, "# Recipient: %s\n", strings.ToLower(k.Recipient))
+	Marshal(i, w)
+	fmt.Fprintf(w, "# Recipient: %s\n", strings.ToLower(i.Recipient))
 	fmt.Fprintf(w, "\n%s\n", key)
 	return nil
 }
 
-func MarshalRecipient(k *Key, w io.Writer) error {
-	Marshal(k, w)
-	fmt.Fprintf(w, "%s\n", strings.ToLower(k.Recipient))
+func MarshalRecipient(i *Identity, w io.Writer) error {
+	Marshal(i, w)
+	fmt.Fprintf(w, "%s\n", strings.ToLower(i.Recipient))
 	return nil
 }

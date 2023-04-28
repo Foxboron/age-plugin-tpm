@@ -7,20 +7,20 @@ import (
 
 var data = []struct {
 	key string
-	t   *Key
+	t   *Identity
 }{
 	{
 		key: "AGE-PLUGIN-TPM-1QXQSQQQPCTWLLV",
-		t: &Key{
+		t: &Identity{
 			Version: 1,
 			Handle:  0x81000001,
 		},
 	},
 }
 
-func TestKeyGeneration(t *testing.T) {
+func TestIdentityIdentityGeneration(t *testing.T) {
 	for _, d := range data {
-		k, err := EncodeKey(d.t)
+		k, err := EncodeIdentity(d.t)
 		if err != nil {
 			t.Fatalf("failed to encode key: %v", err)
 		}
@@ -30,9 +30,9 @@ func TestKeyGeneration(t *testing.T) {
 	}
 }
 
-func TestKeyDecode(t *testing.T) {
+func TestIdentityDecode(t *testing.T) {
 	for _, d := range data {
-		k, err := DecodeKey(d.key)
+		k, err := DecodeIdentity(d.key)
 		if err != nil {
 			t.Fatalf("failed to decode key: %v", err)
 		}

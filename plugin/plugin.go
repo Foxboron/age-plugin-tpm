@@ -65,7 +65,7 @@ var (
 	}
 )
 
-func CreateKey(tpm io.ReadWriteCloser) (*Key, error) {
+func CreateIdentity(tpm io.ReadWriteCloser) (*Identity, error) {
 	if !HasKey(tpm, srkHandle) {
 		handle, _, err := tpm2.CreatePrimary(tpm, tpm2.HandleOwner, tpm2.PCRSelection{}, "", "", srkTemplate)
 		if err != nil {
@@ -94,7 +94,7 @@ func CreateKey(tpm io.ReadWriteCloser) (*Key, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Key{
+	return &Identity{
 		Version:   1,
 		Handle:    localHandle,
 		PIN:       HasPIN,

@@ -17,7 +17,7 @@ import (
 type PluginOptions struct {
 	SwTPM        bool
 	AgePlugin    string
-	GenerateKey  bool
+	Generate     bool
 	List         bool
 	Identities   bool
 	Decrypt      bool
@@ -29,13 +29,13 @@ type PluginOptions struct {
 }
 
 var example = `
-  $ age-plugin-tpm --generate-key -o key.txt
+  $ age-plugin-tpm --generate -o age-identity.txt
   Public key:
   age1tpm1syqqqpqqqqqqqqqpqqqmjga47cvugu29m30p4tj420v55xszp622jq8zc5ad7clmxwy[...]
 
   $ echo "Hello World" | age -r "age1tpm1syqqqpqqqqqqqqqpqqqmjga47cvugu29m30p4tj420v55xszp622jq8zc5ad7clmxwy[...]" > secret.age
 
-  $ age --decrypt -i key.txt -o - secret.age
+  $ age --decrypt -i age-identity.txt -o - secret.age
   Hello World`
 
 var (
@@ -43,7 +43,7 @@ var (
 	pluginOptions = PluginOptions{}
 	rootCmd       = &cobra.Command{
 		Use:     "age-plugin-tpm",
-		Long:    "age-plugin-tpm is a tool to generate age compatible keys with backed by a TPM.",
+		Long:    "age-plugin-tpm is a tool to generate age compatible identities backed by a TPM.",
 		Example: example,
 		RunE:    RunPlugin,
 	}
@@ -63,12 +63,12 @@ func SetLogger() {
 
 func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser) error {
 	switch {
-	case pluginOptions.GenerateKey:
-		k, err := plugin.CreateKey(tpm)
+	case pluginOptions.Generate:
+		k, err := plugin.CreateIdentity(tpm)
 		if err != nil {
 			return err
 		}
-		plugin.SaveKey(k)
+		plugin.SaveIdentity(k)
 		if err = plugin.MarshalIdentity(k, os.Stdout); err != nil {
 			return err
 		}
@@ -83,7 +83,7 @@ func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser) error {
 		}
 
 	case pluginOptions.List:
-		keys, err := plugin.GetSavedKeys()
+		keys, err := plugin.GetSavedIdentities()
 		if err != nil {
 			return err
 		}
@@ -97,7 +97,7 @@ func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser) error {
 		}
 
 	case pluginOptions.Identities:
-		keys, err := plugin.GetSavedKeys()
+		keys, err := plugin.GetSavedIdentities()
 		if err != nil {
 			return err
 		}
@@ -121,11 +121,11 @@ func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser) error {
 		if err := plugin.DeleteHandle(tpm, handle); err != nil {
 			return fmt.Errorf("failed deleting key: %v", err)
 		}
-		k, err := plugin.GetKey(handle)
+		k, err := plugin.GetIdentity(handle)
 		if err != nil {
 			return err
 		}
-		if err := plugin.DeleteKey(k); err != nil {
+		if err := plugin.DeleteIdentity(k); err != nil {
 			return fmt.Errorf("failed deleting key: %v", err)
 		}
 		return nil
@@ -250,7 +250,7 @@ parser:
 			}
 
 			identity := identities[0]
-			k, err := plugin.DecodeKey(identity)
+			k, err := plugin.DecodeIdentity(identity)
 			if err != nil {
 				return err
 			}
@@ -302,7 +302,7 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 	flags := cmd.Flags()
 	flags.SortFlags = false
 
-	flags.BoolVarP(&pluginOptions.GenerateKey, "generate-key", "g", false, "Generate a key on the TPM. Defaults to storing it under handle 0x81000004")
+	flags.BoolVarP(&pluginOptions.Generate, "generate", "g", false, "Generate a identity on the TPM. Defaults to storing it under handle 0x81000004")
 	flags.BoolVarP(&pluginOptions.List, "list", "l", false, "List recipients for age identities backed by the TPM.")
 	flags.BoolVarP(&pluginOptions.Identities, "identity", "i", false, "List age identities stored in the TPM.")
 	flags.StringVarP(&pluginOptions.OutputFile, "output", "o", "", "Write the result to the file.")

@@ -26,10 +26,10 @@ func GetConfigFile() string {
 	return path.Join(GetCacheDir(), config)
 }
 
-type Keys map[tpmutil.Handle]*Key
+type Identities map[tpmutil.Handle]*Identity
 
-func GetSavedKeys() (Keys, error) {
-	keys := Keys{}
+func GetSavedIdentities() (Identities, error) {
+	keys := Identities{}
 	b, err := os.ReadFile(GetConfigFile())
 	if errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(GetCacheDir(), 0755); err != nil {
@@ -46,12 +46,25 @@ func GetSavedKeys() (Keys, error) {
 	return keys, nil
 }
 
-func DeleteKey(k *Key) error {
-	keys, err := GetSavedKeys()
+func DeleteIdentity(i *Identity) error {
+	identities, err := GetSavedIdentities()
 	if err != nil {
 		return err
 	}
-	delete(keys, tpmutil.Handle(k.Handle))
+	delete(identities, tpmutil.Handle(i.Handle))
+	b, err := json.Marshal(identities)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(GetConfigFile(), b, 0644)
+}
+
+func SaveIdentity(i *Identity) error {
+	keys, err := GetSavedIdentities()
+	if err != nil {
+		return err
+	}
+	keys[tpmutil.Handle(i.Handle)] = i
 	b, err := json.Marshal(keys)
 	if err != nil {
 		return err
@@ -59,25 +72,12 @@ func DeleteKey(k *Key) error {
 	return os.WriteFile(GetConfigFile(), b, 0644)
 }
 
-func SaveKey(k *Key) error {
-	keys, err := GetSavedKeys()
-	if err != nil {
-		return err
-	}
-	keys[tpmutil.Handle(k.Handle)] = k
-	b, err := json.Marshal(keys)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(GetConfigFile(), b, 0644)
-}
-
-func GetKey(handle tpmutil.Handle) (*Key, error) {
-	keys, err := GetSavedKeys()
+func GetIdentity(handle tpmutil.Handle) (*Identity, error) {
+	identities, err := GetSavedIdentities()
 	if err != nil {
 		return nil, err
 	}
-	k, ok := keys[handle]
+	k, ok := identities[handle]
 	if !ok {
 		return nil, fmt.Errorf("can't find key with handle")
 	}

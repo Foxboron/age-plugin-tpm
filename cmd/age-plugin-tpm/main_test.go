@@ -38,7 +38,7 @@ func TestEncryptDecrypt(t *testing.T) {
 		os.Stdout = null
 		// First generate a key
 		pluginOptions = PluginOptions{
-			GenerateKey: true,
+			Generate: true,
 		}
 
 		err := RunCli(&cobra.Command{}, tpm.TPM())
@@ -54,7 +54,7 @@ func TestEncryptDecrypt(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
-		key, err := plugin.GetKey(handle)
+		key, err := plugin.GetIdentity(handle)
 		if err != nil {
 			t.Fatalf("Failed GetKey: %v", err)
 		}
@@ -77,12 +77,12 @@ func TestEncryptDecrypt(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
-		key, err := plugin.GetKey(handle)
+		key, err := plugin.GetIdentity(handle)
 		if err != nil {
 			t.Fatalf("Failed GetKey: %v", err)
 		}
 
-		identity, err := plugin.EncodeKey(key)
+		identity, err := plugin.EncodeIdentity(key)
 		if err != nil {
 			t.Fatalf("Failed EncodeKey: %v", err)
 		}
