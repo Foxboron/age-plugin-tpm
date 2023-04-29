@@ -50,7 +50,6 @@ $ age-plugin-tpm --generate
 # Recipient: age1tpm1syqqqpqrtxsnkkqlmu505zzrq439hetls4qwwmyhsv8dgjhksvtewvx29lxs7s68qy
 
 AGE-PLUGIN-TPM-1QXQSQQQY2HCVDY
-
 ```
 
 Recipients can be listed with:
