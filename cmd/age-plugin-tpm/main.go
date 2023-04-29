@@ -30,10 +30,13 @@ type PluginOptions struct {
 
 var example = `
   $ age-plugin-tpm --generate -o age-identity.txt
-  Public key:
-  age1tpm1syqqqpqqqqqqqqqpqqqmjga47cvugu29m30p4tj420v55xszp622jq8zc5ad7clmxwy[...]
+  # Handle: 0x81000004
+  # Created: 2023-04-29 13:33:37 +0200 CEST
+  # Recipient: age1tpm1syqqqpqrtxsnkkqlmu505zzrq439hetls4qwwmyhsv8dgjhksvtewvx29lxs7s68qy
 
-  $ echo "Hello World" | age -r "age1tpm1syqqqpqqqqqqqqqpqqqmjga47cvugu29m30p4tj420v55xszp622jq8zc5ad7clmxwy[...]" > secret.age
+  AGE-PLUGIN-TPM-1QXQSQQQY2HCVDY
+
+  $ echo "Hello World" | age -r "age1tpm1syqqqpqrtxsnkkqlmu505zzrq439hetls4qwwmyhsv8dgjhksvtewvx29lxs7s68qy" > secret.age
 
   $ age --decrypt -i age-identity.txt -o - secret.age
   Hello World`
