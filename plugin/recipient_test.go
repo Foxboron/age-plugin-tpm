@@ -37,7 +37,7 @@ var cases = []struct {
 		},
 	),
 
-	Recipient: "age1tpm1syqqqpqyckxttkp8xwu43ycm8xy9r39lxddaz3mr85zs3d3enql3a3xk8jnky32w3klcs29vj94445js7yq720qavvenpkpdq75ve7m2r4mr77stt6lyy",
+	Recipient: "age1tpm1syqqqpqzckxttkp8xwu43ycm8xy9r39lxddaz3mr85zs3d3enql3a3xk8jns7s2gyx",
 }}
 
 func TestDecodeRecipient(t *testing.T) {
@@ -61,8 +61,9 @@ func TestEncodeRecipient(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed encoding key: %v", err)
 		}
+
 		if !strings.EqualFold(s, c.Recipient) {
-			t.Fatalf("did not the recipient back")
+			t.Fatalf("did not get the recipient back")
 		}
 	}
 }

@@ -22,7 +22,7 @@ import (
 func EncodeRecipient(handle tpmutil.Handle, pubkey *ecdh.PublicKey) (string, error) {
 	var b bytes.Buffer
 	binary.Write(&b, binary.BigEndian, handle)
-	binary.Write(&b, binary.BigEndian, pubkey.Bytes())
+	binary.Write(&b, binary.BigEndian, MarshalCompressedECDH(pubkey))
 	return bech32.Encode(RecipientPrefix, b.Bytes())
 }
 
@@ -45,7 +45,7 @@ func DecodeRecipient(s string) (tpmutil.Handle, *ecdh.PublicKey, error) {
 
 	var bb bytes.Buffer
 	io.Copy(&bb, r)
-	ecdhKey, err := ecdh.P256().NewPublicKey(bb.Bytes())
+	_, _, ecdhKey, err := UnmarshalCompressedECDH(bb.Bytes())
 	if err != nil {
 		return handle, nil, err
 	}
@@ -85,5 +85,5 @@ func WrapFileKey(fileKey []byte, pubkey *ecdh.PublicKey) ([]byte, []byte, error)
 		return nil, nil, err
 	}
 	nonce := make([]byte, chacha20poly1305.NonceSize)
-	return aead.Seal(nil, nonce, fileKey, nil), sessionPubKey.Bytes(), nil
+	return aead.Seal(nil, nonce, fileKey, nil), MarshalCompressedECDH(sessionPubKey), nil
 }

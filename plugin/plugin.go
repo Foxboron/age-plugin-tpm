@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -130,12 +131,11 @@ func GetTPM(tpm io.ReadWriteCloser) {
 
 func DecryptTPM(tpm io.ReadWriteCloser, handle tpmutil.Handle, remoteKey []byte, fileKey []byte) ([]byte, error) {
 
-	sessionKey, err := ecdh.P256().NewPublicKey(remoteKey)
+	x, y, sessionKey, err := UnmarshalCompressedECDH(remoteKey)
 	if err != nil {
 		return nil, err
 	}
 
-	x, y := elliptic.Unmarshal(elliptic.P256(), sessionKey.Bytes())
 	sharedSecret, err := tpm2.ECDHZGen(tpm, handle, "",
 		tpm2.ECPoint{XRaw: x.Bytes(), YRaw: y.Bytes()})
 	if err != nil {
@@ -193,4 +193,20 @@ func StringToHandle(handle string) (tpmutil.Handle, error) {
 		return 0, err
 	}
 	return tpmutil.Handle(value), nil
+}
+
+// Unmarshal a compressed ec key
+func UnmarshalCompressedECDH(b []byte) (*big.Int, *big.Int, *ecdh.PublicKey, error) {
+	x, y := elliptic.UnmarshalCompressed(elliptic.P256(), b)
+	ec := ecdsa.PublicKey{
+		Curve: elliptic.P256(), X: x, Y: y,
+	}
+	key, err := ec.ECDH()
+	return x, y, key, err
+}
+
+// Marshal a compressed EC key
+func MarshalCompressedECDH(pk *ecdh.PublicKey) []byte {
+	x, y := elliptic.Unmarshal(elliptic.P256(), pk.Bytes())
+	return elliptic.MarshalCompressed(elliptic.P256(), x, y)
 }
