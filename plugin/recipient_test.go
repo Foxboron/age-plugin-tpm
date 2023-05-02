@@ -8,8 +8,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/google/go-tpm/tpmutil"
 )
 
 func bigInt(s string) *big.Int {
@@ -24,12 +22,10 @@ func mustECDH(e *ecdsa.PublicKey) *ecdh.PublicKey {
 }
 
 var cases = []struct {
-	Handle    tpmutil.Handle
-	PubKey    *ecdh.PublicKey
-	Recipient string
+	pubKey    *ecdh.PublicKey
+	recipient string
 }{{
-	Handle: 0x81000004,
-	PubKey: mustECDH(
+	pubKey: mustECDH(
 		&ecdsa.PublicKey{
 			Curve: elliptic.P256(),
 			X:     bigInt("89354244803538158909979995955747079783816134516555582017998279936143319776423"),
@@ -37,19 +33,16 @@ var cases = []struct {
 		},
 	),
 
-	Recipient: "age1tpm1syqqqpqzckxttkp8xwu43ycm8xy9r39lxddaz3mr85zs3d3enql3a3xk8jns7s2gyx",
+	recipient: "age1tpm1qtzcedwcyuemjkynrvucs5wyhue4h528vv7s2z9k8xvr78ky6c72wff0tz2",
 }}
 
 func TestDecodeRecipient(t *testing.T) {
 	for _, c := range cases {
-		handle, pubkey, err := DecodeRecipient(c.Recipient)
+		pubkey, err := DecodeRecipient(c.recipient)
 		if err != nil {
 			t.Fatalf("failed decoding recipient: %v", err)
 		}
-		if c.Handle != handle {
-			t.Fatalf("Failed to get handle. Expected %v got %v", c.Handle, handle)
-		}
-		if !reflect.DeepEqual(pubkey, c.PubKey) {
+		if !reflect.DeepEqual(pubkey, c.pubKey) {
 			t.Fatalf("Did not parse the correct key")
 		}
 	}
@@ -57,12 +50,11 @@ func TestDecodeRecipient(t *testing.T) {
 
 func TestEncodeRecipient(t *testing.T) {
 	for _, c := range cases {
-		s, err := EncodeRecipient(c.Handle, c.PubKey)
+		s, err := EncodeRecipient(c.pubKey)
 		if err != nil {
 			t.Fatalf("failed encoding key: %v", err)
 		}
-
-		if !strings.EqualFold(s, c.Recipient) {
+		if !strings.EqualFold(s, c.recipient) {
 			t.Fatalf("did not get the recipient back")
 		}
 	}

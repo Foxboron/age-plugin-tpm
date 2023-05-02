@@ -173,7 +173,7 @@ parser:
 
 			// TODO: Support multiple identities
 			identity := recipients[0]
-			_, pubkey, err := plugin.DecodeRecipient(identity)
+			pubkey, err := plugin.DecodeRecipient(identity)
 			if err != nil {
 				return err
 			}

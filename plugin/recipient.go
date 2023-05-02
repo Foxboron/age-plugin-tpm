@@ -10,7 +10,6 @@ import (
 	"io"
 
 	"github.com/foxboron/age-plugin-tpm/internal/bech32"
-	"github.com/google/go-tpm/tpmutil"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
 )
@@ -19,38 +18,28 @@ import (
 //       Optionally with a reserved field so we could implement
 //       other key-types in the future
 
-func EncodeRecipient(handle tpmutil.Handle, pubkey *ecdh.PublicKey) (string, error) {
+func EncodeRecipient(pubkey *ecdh.PublicKey) (string, error) {
 	var b bytes.Buffer
-	binary.Write(&b, binary.BigEndian, handle)
 	binary.Write(&b, binary.BigEndian, MarshalCompressedECDH(pubkey))
 	return bech32.Encode(RecipientPrefix, b.Bytes())
 }
 
-func DecodeRecipient(s string) (tpmutil.Handle, *ecdh.PublicKey, error) {
+func DecodeRecipient(s string) (*ecdh.PublicKey, error) {
 	hrp, b, err := bech32.Decode(s)
 	if err != nil {
-		return 0, nil, fmt.Errorf("DecodeRecipinet: failed to decode bech32: %v", err)
+		return nil, fmt.Errorf("DecodeRecipinet: failed to decode bech32: %v", err)
 	}
 
 	if hrp != RecipientPrefix {
-		return 0, nil, fmt.Errorf("invalid hrp")
+		return nil, fmt.Errorf("invalid hrp")
 	}
 
-	r := bytes.NewBuffer(b)
-
-	var handle tpmutil.Handle
-	if err := binary.Read(r, binary.BigEndian, &handle); err != nil {
-		return 0, nil, err
-	}
-
-	var bb bytes.Buffer
-	io.Copy(&bb, r)
-	_, _, ecdhKey, err := UnmarshalCompressedECDH(bb.Bytes())
+	_, _, ecdhKey, err := UnmarshalCompressedECDH(b)
 	if err != nil {
-		return handle, nil, err
+		return nil, err
 	}
 
-	return handle, ecdhKey, nil
+	return ecdhKey, nil
 }
 
 const p256Label = "age-encryption.org/v1/tpm-p256"

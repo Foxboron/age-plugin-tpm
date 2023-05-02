@@ -91,7 +91,7 @@ func CreateIdentity(tpm io.ReadWriteCloser) (*Identity, error) {
 	}
 
 	pk := GetPubKey(tpm, localHandle)
-	s, err := EncodeRecipient(localHandle, pk)
+	s, err := EncodeRecipient(pk)
 	if err != nil {
 		return nil, err
 	}
