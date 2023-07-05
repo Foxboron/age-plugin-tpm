@@ -50,10 +50,7 @@ func TestDecodeRecipient(t *testing.T) {
 
 func TestEncodeRecipient(t *testing.T) {
 	for _, c := range cases {
-		s, err := EncodeRecipient(c.pubKey)
-		if err != nil {
-			t.Fatalf("failed encoding key: %v", err)
-		}
+		s := EncodeRecipient(c.pubKey)
 		if !strings.EqualFold(s, c.recipient) {
 			t.Fatalf("did not get the recipient back")
 		}

@@ -3,17 +3,28 @@ package plugin
 import (
 	"reflect"
 	"testing"
+
+	"github.com/google/go-tpm/tpmutil"
 )
+
+func mustPack(d []byte) []byte {
+	packed, err := tpmutil.Pack(d)
+	if err != nil {
+		panic("couldn't pack")
+	}
+	return packed
+}
 
 var data = []struct {
 	key string
 	t   *Identity
 }{
 	{
-		key: "AGE-PLUGIN-TPM-1QXQSQQQPCTWLLV",
+		key: "AGE-PLUGIN-TPM-1QYQQQPMSWF5HVCT5V5QQVUR4VFKXJCC456Q6X",
 		t: &Identity{
 			Version: 1,
-			Handle:  0x81000001,
+			Public:  mustPack([]byte("public")),
+			Private: mustPack([]byte("private")),
 		},
 	},
 }

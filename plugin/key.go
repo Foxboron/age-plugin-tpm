@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -12,7 +13,8 @@ import (
 	"github.com/google/go-tpm/tpmutil"
 )
 
-type PINStatus int64
+// We need to know if the TPM handle has a pin set
+type PINStatus uint8
 
 const (
 	NoPIN PINStatus = iota
@@ -30,22 +32,16 @@ func (p PINStatus) String() string {
 }
 
 type Identity struct {
-	Version   uint8          `json:"version"`
-	Handle    tpmutil.Handle `json:"handle"`
-	PIN       PINStatus      `json:"pin"`
-	Created   time.Time      `json:"created"`
-	Identity  string         `json:"identity"`
-	Recipient string         `json:"recipient"`
-}
-
-func (i *Identity) HandleToString() string {
-	return HandleToString(i.Handle)
+	Version uint8
+	PIN     PINStatus
+	Private tpmutil.U16Bytes
+	Public  tpmutil.U16Bytes
 }
 
 func (i *Identity) Serialize() []any {
 	return []interface{}{
 		&i.Version,
-		&i.Handle,
+		&i.PIN,
 	}
 }
 
@@ -64,6 +60,11 @@ func DecodeIdentity(s string) (*Identity, error) {
 			return nil, err
 		}
 	}
+
+	if err := tpmutil.UnpackBuf(r, &key.Private, &key.Public); err != nil {
+		return nil, fmt.Errorf("failed unpacking buffer: %v", err)
+	}
+
 	return &key, nil
 }
 
@@ -74,6 +75,12 @@ func EncodeIdentity(i *Identity) (string, error) {
 			return "", err
 		}
 	}
+
+	packed, err := tpmutil.Pack(&i.Private, &i.Public)
+	if err != nil {
+		return "", fmt.Errorf("failed packing TPM key: %v", err)
+	}
+	b.Write(packed)
 	s, err := bech32.Encode(strings.ToUpper(IdentityPrefix), b.Bytes())
 	if err != nil {
 		return "", err
@@ -83,30 +90,23 @@ func EncodeIdentity(i *Identity) (string, error) {
 
 var (
 	marshalTemplate = `
-# Handle: %s
 # Created: %s
 `
 )
 
 func Marshal(i *Identity, w io.Writer) {
-	s := fmt.Sprintf(marshalTemplate, i.HandleToString(), i.Created)
+	s := fmt.Sprintf(marshalTemplate, time.Now())
 	s = strings.TrimSpace(s)
 	fmt.Fprintf(w, "%s\n", s)
 }
 
-func MarshalIdentity(i *Identity, w io.Writer) error {
+func MarshalIdentity(i *Identity, recipient string, w io.Writer) error {
 	key, err := EncodeIdentity(i)
 	if err != nil {
 		return err
 	}
 	Marshal(i, w)
-	fmt.Fprintf(w, "# Recipient: %s\n", strings.ToLower(i.Recipient))
+	fmt.Fprintf(w, "# Recipient: %s\n", recipient)
 	fmt.Fprintf(w, "\n%s\n", key)
-	return nil
-}
-
-func MarshalRecipient(i *Identity, w io.Writer) error {
-	Marshal(i, w)
-	fmt.Fprintf(w, "%s\n", strings.ToLower(i.Recipient))
 	return nil
 }

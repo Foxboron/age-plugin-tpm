@@ -11,7 +11,6 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpmutil"
@@ -30,9 +29,6 @@ const (
 var (
 	// Default SRK handle
 	srkHandle tpmutil.Handle = 0x81000001
-
-	// Default SRK handle
-	localHandle tpmutil.Handle = 0x81000004
 
 	srkTemplate = tpm2.Public{
 		Type:       tpm2.AlgECC,
@@ -66,42 +62,37 @@ var (
 	}
 )
 
-func CreateIdentity(tpm io.ReadWriteCloser) (*Identity, error) {
+func CreateIdentity(tpm io.ReadWriteCloser) (*Identity, string, error) {
 	if !HasKey(tpm, srkHandle) {
 		handle, _, err := tpm2.CreatePrimary(tpm, tpm2.HandleOwner, tpm2.PCRSelection{}, "", "", srkTemplate)
 		if err != nil {
-			return nil, fmt.Errorf("failed CreatePrimary: %v", err)
+			return nil, "", fmt.Errorf("failed CreatePrimary: %v", err)
 		}
 		if err = tpm2.EvictControl(tpm, "", tpm2.HandleOwner, handle, srkHandle); err != nil {
-			return nil, fmt.Errorf("failed EvictControl of srk: %v", err)
+			return nil, "", fmt.Errorf("failed EvictControl of srk: %v", err)
 		}
 	}
 
 	priv, pub, _, _, _, err := tpm2.CreateKey(tpm, srkHandle, tpm2.PCRSelection{}, "", "", eccKeyParamsDecrypt)
 	if err != nil {
-		return nil, fmt.Errorf("failed CreateKey: %v", err)
-	}
-	sealedHandle, _, err := tpm2.Load(tpm, srkHandle, "", pub, priv)
-	if err != nil {
-		return nil, fmt.Errorf("failed Load: %v", err)
-	}
-	defer tpm2.FlushContext(tpm, sealedHandle)
-	if err = tpm2.EvictControl(tpm, "", tpm2.HandleOwner, sealedHandle, localHandle); err != nil {
-		return nil, fmt.Errorf("failed EvictControl: %v", err)
+		return nil, "", fmt.Errorf("failed CreateKey: %v", err)
 	}
 
-	pk := GetPubKey(tpm, localHandle)
-	s, err := EncodeRecipient(pk)
-	if err != nil {
-		return nil, err
+	identity := &Identity{
+		Version: 1,
+		PIN:     HasPIN,
+		Private: priv,
+		Public:  pub,
 	}
-	return &Identity{
-		Version:   1,
-		Handle:    localHandle,
-		PIN:       HasPIN,
-		Created:   time.Now(),
-		Recipient: s,
-	}, nil
+
+	handle, err := GetHandle(tpm, identity)
+	if err != nil {
+		return nil, "", err
+	}
+	defer tpm2.FlushContext(tpm, handle)
+
+	pubkey := GetPubKey(tpm, handle)
+	return identity, EncodeRecipient(pubkey), nil
 }
 
 func HasKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) bool {
@@ -109,6 +100,14 @@ func HasKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) bool {
 		return false
 	}
 	return true
+}
+
+func GetHandle(tpm io.ReadWriteCloser, identity *Identity) (tpmutil.Handle, error) {
+	handle, _, err := tpm2.Load(tpm, srkHandle, "", identity.Public, identity.Private)
+	if err != nil {
+		return 0, err
+	}
+	return handle, nil
 }
 
 func GetPubKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) *ecdh.PublicKey {
@@ -129,12 +128,17 @@ func GetTPM(tpm io.ReadWriteCloser) {
 	tpm2.GetCapability(tpm, tpm2.CapabilityTPMProperties, 1, uint32(tpm2.FirmwareVersion1))
 }
 
-func DecryptTPM(tpm io.ReadWriteCloser, handle tpmutil.Handle, remoteKey []byte, fileKey []byte) ([]byte, error) {
-
+func DecryptTPM(tpm io.ReadWriteCloser, identity *Identity, remoteKey []byte, fileKey []byte) ([]byte, error) {
 	x, y, sessionKey, err := UnmarshalCompressedECDH(remoteKey)
 	if err != nil {
 		return nil, err
 	}
+
+	handle, err := GetHandle(tpm, identity)
+	if err != nil {
+		return nil, err
+	}
+	defer tpm2.FlushContext(tpm, handle)
 
 	sharedSecret, err := tpm2.ECDHZGen(tpm, handle, "",
 		tpm2.ECPoint{XRaw: x.Bytes(), YRaw: y.Bytes()})

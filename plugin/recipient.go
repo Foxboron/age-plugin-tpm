@@ -18,10 +18,19 @@ import (
 //       Optionally with a reserved field so we could implement
 //       other key-types in the future
 
-func EncodeRecipient(pubkey *ecdh.PublicKey) (string, error) {
+type Recipient string
+
+func EncodeRecipient(pubkey *ecdh.PublicKey) string {
 	var b bytes.Buffer
 	binary.Write(&b, binary.BigEndian, MarshalCompressedECDH(pubkey))
-	return bech32.Encode(RecipientPrefix, b.Bytes())
+	recp, _ := bech32.Encode(RecipientPrefix, b.Bytes())
+	return recp
+}
+
+func MarshalRecipient(pubkey *ecdh.PublicKey, w io.Writer) error {
+	recipient := EncodeRecipient(pubkey)
+	fmt.Fprintf(w, "%s\n", recipient)
+	return nil
 }
 
 func DecodeRecipient(s string) (*ecdh.PublicKey, error) {

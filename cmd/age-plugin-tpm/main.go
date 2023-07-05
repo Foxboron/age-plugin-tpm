@@ -18,11 +18,8 @@ type PluginOptions struct {
 	SwTPM        bool
 	AgePlugin    string
 	Generate     bool
-	List         bool
-	Identities   bool
 	Decrypt      bool
 	Encrypt      bool
-	DeleteHandle bool
 	OutputFile   string
 	LogFile      string
 	Handle       string
@@ -64,74 +61,26 @@ func SetLogger() {
 	plugin.SetLogger(w)
 }
 
-func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser) error {
+func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser, out io.Writer) error {
 	switch {
 	case pluginOptions.Generate:
-		k, err := plugin.CreateIdentity(tpm)
+		identity, recipient, err := plugin.CreateIdentity(tpm)
 		if err != nil {
 			return err
 		}
-		plugin.SaveIdentity(k)
-		if err = plugin.MarshalIdentity(k, os.Stdout); err != nil {
+		if err = plugin.MarshalIdentity(identity, recipient, out); err != nil {
 			return err
 		}
 		if pluginOptions.OutputFile != "" {
-			f, err := os.Open(pluginOptions.OutputFile)
+			f, err := os.OpenFile(pluginOptions.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 			if err != nil {
 				return err
 			}
-			if err = plugin.MarshalIdentity(k, f); err != nil {
+			defer f.Close()
+			if err = plugin.MarshalIdentity(identity, recipient, f); err != nil {
 				return err
 			}
 		}
-
-	case pluginOptions.List:
-		keys, err := plugin.GetSavedIdentities()
-		if err != nil {
-			return err
-		}
-		for _, k := range keys {
-			if !plugin.HasKey(tpm, k.Handle) {
-				continue
-			}
-			if err = plugin.MarshalRecipient(k, os.Stdout); err != nil {
-				return err
-			}
-		}
-
-	case pluginOptions.Identities:
-		keys, err := plugin.GetSavedIdentities()
-		if err != nil {
-			return err
-		}
-		for _, k := range keys {
-			if !plugin.HasKey(tpm, k.Handle) {
-				continue
-			}
-			if err = plugin.MarshalIdentity(k, os.Stdout); err != nil {
-				return err
-			}
-		}
-
-	case pluginOptions.DeleteHandle:
-		if pluginOptions.Handle == "" {
-			return fmt.Errorf("need to specify --handle before using --delete")
-		}
-		handle, err := plugin.StringToHandle(pluginOptions.Handle)
-		if err != nil {
-			return err
-		}
-		if err := plugin.DeleteHandle(tpm, handle); err != nil {
-			return fmt.Errorf("failed deleting key: %v", err)
-		}
-		k, err := plugin.GetIdentity(handle)
-		if err != nil {
-			return err
-		}
-		if err := plugin.DeleteIdentity(k); err != nil {
-			return fmt.Errorf("failed deleting key: %v", err)
-		}
-		return nil
 	default:
 		return cmd.Help()
 	}
@@ -258,14 +207,13 @@ parser:
 				return err
 			}
 
-			key, err := plugin.DecryptTPM(tpm, k.Handle, sessionKey, wrappedKey)
+			key, err := plugin.DecryptTPM(tpm, k, sessionKey, wrappedKey)
 			if err != nil {
 				return err
 			}
 			stdout.WriteString("-> file-key 0\n")
 			stdout.WriteString(b64Encode(key) + "\n")
 		case "done":
-			// Age kills us off too quickly to properly shut down swtpm, so do this before returning.
 			stdout.WriteString("-> done\n\n")
 			break parser
 		}
@@ -305,13 +253,10 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 	flags := cmd.Flags()
 	flags.SortFlags = false
 
-	flags.BoolVarP(&pluginOptions.Generate, "generate", "g", false, "Generate a identity on the TPM. Defaults to storing it under handle 0x81000004")
-	flags.BoolVarP(&pluginOptions.List, "list", "l", false, "List recipients for age identities backed by the TPM.")
-	flags.BoolVarP(&pluginOptions.Identities, "identity", "i", false, "List age identities stored in the TPM.")
+	flags.BoolVarP(&pluginOptions.Convert, "convert", "y", false, "Convert identities to recipients.")
 	flags.StringVarP(&pluginOptions.OutputFile, "output", "o", "", "Write the result to the file.")
 
-	flags.BoolVar(&pluginOptions.DeleteHandle, "delete", false, "Delete a handle from the TPM. Needs to be formatted as hex.")
-	flags.StringVar(&pluginOptions.Handle, "handle", "", "Specify which handle to use. Example: 0x81000004.")
+	flags.BoolVarP(&pluginOptions.Generate, "generate", "g", false, "Generate a identity.")
 
 	// Debug or logging stuff
 	flags.StringVar(&pluginOptions.LogFile, "log-file", "", "Logging file for debug output")
