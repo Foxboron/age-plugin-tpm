@@ -18,8 +18,6 @@ import (
 //       Optionally with a reserved field so we could implement
 //       other key-types in the future
 
-type Recipient string
-
 func EncodeRecipient(pubkey *ecdh.PublicKey) string {
 	var b bytes.Buffer
 	binary.Write(&b, binary.BigEndian, MarshalCompressedECDH(pubkey))

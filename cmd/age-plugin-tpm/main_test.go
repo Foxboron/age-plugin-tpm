@@ -34,7 +34,7 @@ func TestEncryptDecrypt(t *testing.T) {
 			Generate: true,
 		}
 
-		err := RunCli(&cobra.Command{}, tpm.TPM(), &generatedKey)
+		err := RunCli(&cobra.Command{}, tpm.TPM(), os.Stdin, &generatedKey)
 		if err != nil {
 			t.Fatalf("Failed generating keys")
 		}

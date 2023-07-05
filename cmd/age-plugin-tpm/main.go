@@ -11,18 +11,19 @@ import (
 	"strings"
 
 	"github.com/foxboron/age-plugin-tpm/plugin"
+	"github.com/google/go-tpm/tpm2"
 	"github.com/spf13/cobra"
 )
 
 type PluginOptions struct {
-	SwTPM        bool
-	AgePlugin    string
-	Generate     bool
-	Decrypt      bool
-	Encrypt      bool
-	OutputFile   string
-	LogFile      string
-	Handle       string
+	SwTPM      bool
+	AgePlugin  string
+	Convert    bool
+	Generate   bool
+	Decrypt    bool
+	Encrypt    bool
+	OutputFile string
+	LogFile    string
 }
 
 var example = `
@@ -61,7 +62,7 @@ func SetLogger() {
 	plugin.SetLogger(w)
 }
 
-func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser, out io.Writer) error {
+func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser, in io.Reader, out io.Writer) error {
 	switch {
 	case pluginOptions.Generate:
 		identity, recipient, err := plugin.CreateIdentity(tpm)
@@ -81,6 +82,18 @@ func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser, out io.Writer) error {
 				return err
 			}
 		}
+	case pluginOptions.Convert:
+		identity, err := plugin.ParseIdentity(in)
+		if err != nil {
+			return err
+		}
+		handle, err := plugin.GetHandle(tpm, identity)
+		if err != nil {
+			return err
+		}
+		defer tpm2.FlushContext(tpm, handle)
+		pubkey := plugin.GetPubKey(tpm, handle)
+		return plugin.MarshalRecipient(pubkey, out)
 	default:
 		return cmd.Help()
 	}
@@ -164,6 +177,7 @@ func RunIdentityV1(tpm io.ReadWriteCloser, stdin io.Reader, stdout io.StringWrit
 parser:
 	for scanner.Scan() {
 		entry = scanner.Text()
+		plugin.Log.Printf("scanned: '%s'\n", entry)
 		if len(entry) == 0 {
 			continue
 		}
@@ -245,7 +259,16 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 		plugin.Log.Println("Got identity-v1")
 		return RunIdentityV1(tpm.TPM(), os.Stdin, os.Stdout)
 	default:
-		return RunCli(cmd, tpm.TPM())
+		in := os.Stdin
+		if inFile := cmd.Flags().Arg(0); inFile != "" && inFile != "-" {
+			f, err := os.Open(inFile)
+			if err != nil {
+				return fmt.Errorf("failed to open input file %q: %v", inFile, err)
+			}
+			defer f.Close()
+			in = f
+		}
+		return RunCli(cmd, tpm.TPM(), in, os.Stdout)
 	}
 }
 

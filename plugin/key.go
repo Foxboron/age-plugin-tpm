@@ -68,6 +68,27 @@ func DecodeIdentity(s string) (*Identity, error) {
 	return &key, nil
 }
 
+func ParseIdentity(f io.Reader) (*Identity, error) {
+	// Same parser as age
+	const privateKeySizeLimit = 1 << 24 // 16 MiB
+	scanner := bufio.NewScanner(io.LimitReader(f, privateKeySizeLimit))
+	var n int
+	for scanner.Scan() {
+		n++
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+
+		identity, err := DecodeIdentity(line)
+		if err != nil {
+			return nil, fmt.Errorf("error at line %d: %v", n, err)
+		}
+		return identity, nil
+	}
+	return nil, fmt.Errorf("no identites found")
+}
+
 func EncodeIdentity(i *Identity) (string, error) {
 	var b bytes.Buffer
 	for _, v := range i.Serialize() {
