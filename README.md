@@ -9,7 +9,7 @@ which enables files to be encrypted to age identities stored on YubiKeys.
 The identity format and technical details might change between iterations.
 Consider this plugin experimental.
 
-Insteal of utilizing the TPM directly, you can use `--swtpm` or `export
+Instead of utilizing the TPM directly, you can use `--swtpm` or `export
 AGE_PLUGIN_TPM_SWTPM=1` to create a identity backed by
 [swtpm](https://github.com/stefanberger/swtpm) which will be stored under
 `/var/tmp/age-plugin-tpm`.
@@ -28,10 +28,9 @@ the follow go command.
 # Usage
 
 ```bash
-# Create indetity
-$ age-plugin-tpm --generate
-$ age-plugin-tpm --identity > age-identity.txt
-$ age-plugin-tpm --list > age-recipient.txt
+# Create identity
+$ age-plugin-tpm --generate -o age-identity.txt
+$ age-plugin-tpm -y age-identity > age-recipient.txt
 
 # Encrypt / Decrypt something
 $ echo "Hack The Planet!" | age -R ./age-recipient.txt -o test-decrypt.txt
@@ -44,38 +43,18 @@ Hack The Planet!
 An age identity can be created with:
 
 ```
-$ age-plugin-tpm --generate
-# Handle: 0x81000004
-# Created: 2023-04-29 14:14:37.191273186 +0200 CEST m=+0.326659927
-# Recipient: age1tpm1syqqqpqrtxsnkkqlmu505zzrq439hetls4qwwmyhsv8dgjhksvtewvx29lxs7s68qy
+$ age-plugin-tpm --generate -o age-identity.txt
+# Created: 2023-07-05 22:38:36.362043774 +0200 CEST m=+0.110154231
+# Recipient: age1tpm1qg86fn5esp30u9h6jy6zvu9gcsvnac09vn8jzjxt8s3qtlcv5h2x287wm36
 
-AGE-PLUGIN-TPM-1QXQSQQQY2HCVDY
+AGE-PLUGIN-TPM-1QYQSQLSQYZJN56KJ4WHGP676AW248W7Z3KE7JRP8HWGGTW98CX955U9NCV4G2QQS828ZMZNQLLC57QU037ELMLA0RR56SM35HLJAFHKY0EH7J62SYJLX3YFULEE7AQJR0DJX7D33HRKWRYHNXFN0TRS45MKUHZGRU3K3EPRUSGSWWV07K2PKTFF79YVACDZSVEKAYY4GEAM6DRNQQPTQQGCQPVQQYQRJQQQQQYQQZQQQXQQSQQSQLFXWNXQX9LSKL2GNGFNS4RZPJ0HPU4JV7G2GEV7ZYP0LPJJAGEGQYQE8GSEC0GWWDVKAFT04QTJWCU3T2KYVXGER35FVMHEY0ZDGEHC4C0EXJ8Y
 ```
 
-Recipients can be listed with:
+To display the recipient of a given identity:
 
 ```
-$ age-plugin-tpm --list
-# Handle: 0x81000004
-# Created: 2023-04-29 14:14:37.191273186 +0200 CEST
-age1tpm1syqqqpqrtxsnkkqlmu505zzrq439hetls4qwwmyhsv8dgjhksvtewvx29lxs7s68qy
-```
-
-Identities can be listed with:
-
-```
-$ age-plugin-tpm --identity
-# Handle: 0x81000004
-# Created: 2023-04-29 14:14:37.191273186 +0200 CEST
-# Recipient: age1tpm1syqqqpqrtxsnkkqlmu505zzrq439hetls4qwwmyhsv8dgjhksvtewvx29lxs7s68qy
-
-AGE-PLUGIN-TPM-1QXQSQQQY2HCVDY
-```
-
-To delete the key:
-
-```
-$ age-plugin-tpm --handle "0x81000004" --delete
+$ age-plugin-tpm -y age-identity.txt
+age1tpm1qg86fn5esp30u9h6jy6zvu9gcsvnac09vn8jzjxt8s3qtlcv5h2x287wm36
 ```
 
 ## License
