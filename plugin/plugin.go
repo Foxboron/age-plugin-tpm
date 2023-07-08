@@ -5,15 +5,14 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math/big"
-	"strconv"
-	"strings"
 
 	"github.com/google/go-tpm/tpm2"
-	"github.com/google/go-tpm/tpmutil"
+	"github.com/google/go-tpm/tpm2/transport"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
 )
@@ -27,133 +26,249 @@ const (
 
 // TPM Variables
 var (
-	// Default SRK handle
-	srkHandle tpmutil.Handle = 0x81000001
 
-	srkTemplate = tpm2.Public{
-		Type:       tpm2.AlgECC,
-		NameAlg:    tpm2.AlgSHA256,
-		Attributes: tpm2.FlagStorageDefault | tpm2.FlagNoDA,
-		ECCParameters: &tpm2.ECCParams{
-			Symmetric: &tpm2.SymScheme{
-				Alg:     tpm2.AlgAES,
-				KeyBits: 128,
-				Mode:    tpm2.AlgCFB,
-			},
-			CurveID: tpm2.CurveNISTP256,
-			Point: tpm2.ECPoint{
-				XRaw: make([]byte, 32),
-				YRaw: make([]byte, 32),
+	// Default SRK handle
+	srkTemplate = tpm2.CreatePrimary{
+		PrimaryHandle: tpm2.TPMRHOwner,
+		InSensitive: tpm2.TPM2BSensitiveCreate{
+			Sensitive: &tpm2.TPMSSensitiveCreate{
+				UserAuth: tpm2.TPM2BAuth{
+					Buffer: []byte(nil),
+				},
 			},
 		},
+		InPublic: tpm2.New2B(tpm2.ECCSRKTemplate),
 	}
 
-	eccKeyParamsDecrypt = tpm2.Public{
-		Type:       tpm2.AlgECC,
-		NameAlg:    tpm2.AlgSHA256,
-		Attributes: tpm2.FlagStorageDefault & ^tpm2.FlagRestricted,
-		ECCParameters: &tpm2.ECCParams{
-			CurveID: tpm2.CurveNISTP256,
-			Point: tpm2.ECPoint{
-				XRaw: make([]byte, 32),
-				YRaw: make([]byte, 32),
+	eccKeyTemplate = tpm2.Create{
+		InPublic: tpm2.New2B(tpm2.TPMTPublic{
+			Type:    tpm2.TPMAlgECC,
+			NameAlg: tpm2.TPMAlgSHA256,
+			ObjectAttributes: tpm2.TPMAObject{
+				FixedTPM:            true,
+				FixedParent:         true,
+				SensitiveDataOrigin: true,
+				UserWithAuth:        true,
+				Decrypt:             true,
 			},
-		},
+			Parameters: tpm2.NewTPMUPublicParms(
+				tpm2.TPMAlgECC,
+				&tpm2.TPMSECCParms{
+					CurveID: tpm2.TPMECCNistP256,
+					Scheme: tpm2.TPMTECCScheme{
+						Scheme: tpm2.TPMAlgECDH,
+						Details: tpm2.NewTPMUAsymScheme(
+							tpm2.TPMAlgECDH,
+							&tpm2.TPMSKeySchemeECDH{
+								HashAlg: tpm2.TPMAlgSHA256,
+							},
+						),
+					},
+				},
+			),
+		}),
 	}
 )
 
-func CreateIdentity(tpm io.ReadWriteCloser) (*Identity, string, error) {
-	if !HasKey(tpm, srkHandle) {
-		handle, _, err := tpm2.CreatePrimary(tpm, tpm2.HandleOwner, tpm2.PCRSelection{}, "", "", srkTemplate)
+var (
+	// Save all handles so we flush them at all when the application exists
+	handles = map[string]tpm2.TPMHandle{}
+)
+
+func AddHandle(handle tpm2.TPMHandle, desc string) {
+	handles[desc] = handle
+
+}
+
+func FlushHandles(tpm transport.TPMCloser) error {
+	var errs error
+	for desc, handle := range handles {
+		flush := tpm2.FlushContext{
+			FlushHandle: handle,
+		}
+		_, err := flush.Execute(tpm)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed CreatePrimary: %v", err)
+			errs = errors.Join(errs, fmt.Errorf("failed flushing handle %s", desc))
 		}
-		if err = tpm2.EvictControl(tpm, "", tpm2.HandleOwner, handle, srkHandle); err != nil {
-			return nil, "", fmt.Errorf("failed EvictControl of srk: %v", err)
+		delete(handles, desc)
+	}
+	return errs
+}
+
+func HasHandle(desc string) (tpm2.TPMHandle, bool) {
+	handle, ok := handles[desc]
+	return handle, ok
+}
+
+// Creates a Storage Key, or return the loaded storage key
+func CreateSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
+	if handle, ok := HasHandle("srk handle"); ok {
+		readPublic := tpm2.ReadPublic{
+			ObjectHandle: handle,
 		}
+		rsp, err := readPublic.Execute(tpm)
+		if err != nil {
+			log.Fatalf("failed creating ECDH key from tpm: %v", err)
+		}
+		srkPublic, err := rsp.OutPublic.Contents()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed getting srk public content: %v", err)
+		}
+		return &tpm2.AuthHandle{
+			Handle: handle,
+			Name:   rsp.Name,
+			Auth:   tpm2.PasswordAuth([]byte("")),
+		}, srkPublic, nil
+
 	}
 
-	priv, pub, _, _, _, err := tpm2.CreateKey(tpm, srkHandle, tpm2.PCRSelection{}, "", "", eccKeyParamsDecrypt)
+	var rsp *tpm2.CreatePrimaryResponse
+	rsp, err := srkTemplate.Execute(tpm)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed CreateKey: %v", err)
+		return nil, nil, fmt.Errorf("failed creating primary key: %v", err)
+	}
+
+	AddHandle(rsp.ObjectHandle, "srk handle")
+
+	srkPublic, err := rsp.OutPublic.Contents()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed getting srk public content: %v", err)
+	}
+
+	return &tpm2.AuthHandle{
+		Handle: rsp.ObjectHandle,
+		Name:   rsp.Name,
+		Auth:   tpm2.PasswordAuth([]byte("")),
+	}, srkPublic, nil
+}
+
+func CreateIdentity(tpm transport.TPMCloser) (*Identity, string, error) {
+	srkHandle, srkPublic, err := CreateSRK(tpm)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed creating SRK: %v", err)
+	}
+
+	eccKeyTemplate.ParentHandle = srkHandle
+
+	var eccRsp *tpm2.CreateResponse
+	eccRsp, err = eccKeyTemplate.Execute(tpm,
+		tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
+			tpm2.AESEncryption(128, tpm2.EncryptIn),
+			tpm2.Salted(srkHandle.Handle, *srkPublic)))
+	if err != nil {
+		return nil, "", fmt.Errorf("failed creating TPM key: %v", err)
 	}
 
 	identity := &Identity{
 		Version: 1,
 		PIN:     HasPIN,
-		Private: priv,
-		Public:  pub,
+		Private: eccRsp.OutPrivate,
+		Public:  eccRsp.OutPublic,
 	}
 
-	handle, err := GetHandle(tpm, identity)
+	handle, err := GetHandle(tpm, *srkHandle, identity)
 	if err != nil {
 		return nil, "", err
 	}
-	defer tpm2.FlushContext(tpm, handle)
 
-	pubkey := GetPubKey(tpm, handle)
+	pubkey := GetPubKey(tpm, handle.Handle)
 	return identity, EncodeRecipient(pubkey), nil
 }
 
-func HasKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) bool {
-	if _, _, _, err := tpm2.ReadPublic(tpm, handle); err != nil {
-		return false
+func GetHandle(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Identity) (*tpm2.NamedHandle, error) {
+	loadBlobCmd := tpm2.Load{
+		ParentHandle: parent,
+		InPrivate:    identity.Private,
+		InPublic:     identity.Public,
 	}
-	return true
+	loadBlobRsp, err := loadBlobCmd.Execute(tpm)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting handle: %v", err)
+	}
+	AddHandle(loadBlobRsp.ObjectHandle, "loaded identity handle")
+	return &tpm2.NamedHandle{
+		Handle: loadBlobRsp.ObjectHandle,
+		Name:   loadBlobRsp.Name,
+	}, nil
 }
 
-func GetHandle(tpm io.ReadWriteCloser, identity *Identity) (tpmutil.Handle, error) {
-	handle, _, err := tpm2.Load(tpm, srkHandle, "", identity.Public, identity.Private)
-	if err != nil {
-		return 0, err
+func GetPubKey(tpm transport.TPMCloser, handle tpm2.TPMHandle) *ecdh.PublicKey {
+	readPublic := tpm2.ReadPublic{
+		ObjectHandle: handle,
 	}
-	return handle, nil
-}
-
-func GetPubKey(tpm io.ReadWriteCloser, handle tpmutil.Handle) *ecdh.PublicKey {
-	pub, _, _, err := tpm2.ReadPublic(tpm, handle)
-	if err != nil {
-		log.Fatal(err)
-	}
-	pubkey, _ := pub.Key()
-	ecKey, err := pubkey.(*ecdsa.PublicKey).ECDH()
+	rspRP, err := readPublic.Execute(tpm)
 	if err != nil {
 		log.Fatalf("failed creating ECDH key from tpm: %v", err)
 	}
-
-	return ecKey
+	pubRead, err := rspRP.OutPublic.Contents()
+	if err != nil {
+		log.Fatalf("failed creating ECDH key from tpm: %v", err)
+	}
+	eccRead, err := pubRead.Unique.ECC()
+	if err != nil {
+		log.Fatalf("failed creating ECDH key from tpm: %v", err)
+	}
+	ecdhKey, err := ecdh.P256().NewPublicKey(elliptic.Marshal(elliptic.P256(),
+		big.NewInt(0).SetBytes(eccRead.X.Buffer),
+		big.NewInt(0).SetBytes(eccRead.Y.Buffer),
+	))
+	if err != nil {
+		log.Fatalf("failed creating ECDH key from tpm: %v", err)
+	}
+	return ecdhKey
 }
 
-func GetTPM(tpm io.ReadWriteCloser) {
-	tpm2.GetCapability(tpm, tpm2.CapabilityTPMProperties, 1, uint32(tpm2.FirmwareVersion1))
-}
-
-func DecryptTPM(tpm io.ReadWriteCloser, identity *Identity, remoteKey []byte, fileKey []byte) ([]byte, error) {
+func DecryptTPM(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Identity, remoteKey []byte, fileKey []byte) ([]byte, error) {
 	x, y, sessionKey, err := UnmarshalCompressedECDH(remoteKey)
 	if err != nil {
 		return nil, err
 	}
 
-	handle, err := GetHandle(tpm, identity)
-	if err != nil {
-		return nil, err
+	swPub := tpm2.TPMSECCPoint{
+		X: tpm2.TPM2BECCParameter{Buffer: x.FillBytes(make([]byte, 32))},
+		Y: tpm2.TPM2BECCParameter{Buffer: y.FillBytes(make([]byte, 32))},
 	}
-	defer tpm2.FlushContext(tpm, handle)
 
-	sharedSecret, err := tpm2.ECDHZGen(tpm, handle, "",
-		tpm2.ECPoint{XRaw: x.Bytes(), YRaw: y.Bytes()})
+	handle, err := GetHandle(tpm, parent, identity)
 	if err != nil {
 		return nil, err
 	}
 
-	ourKey := GetPubKey(tpm, handle).Bytes()
+	ecdh := tpm2.ECDHZGen{
+		KeyHandle: tpm2.AuthHandle{
+			Handle: handle.Handle,
+			Name:   handle.Name,
+			Auth:   tpm2.PasswordAuth([]byte("")),
+		},
+		InPoint: tpm2.New2B(swPub),
+	}
+
+	srkHandle, srkPublic, err := CreateSRK(tpm)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting srk: %v", err)
+	}
+
+	ecdhRsp, err := ecdh.Execute(tpm,
+		tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
+			tpm2.AESEncryption(128, tpm2.EncryptIn),
+			tpm2.Salted(srkHandle.Handle, *srkPublic)))
+	if err != nil {
+		return nil, fmt.Errorf("failed ecdhzgen: %v", err)
+	}
+
+	sharedSecret, err := ecdhRsp.OutPoint.Contents()
+	if err != nil {
+		return nil, fmt.Errorf("failed getting ecdh point: %v", err)
+	}
+
+	ourKey := GetPubKey(tpm, handle.Handle).Bytes()
 	theirKey := sessionKey.Bytes()
 
 	salt := make([]byte, 0, len(theirKey)+len(ourKey))
 	salt = append(salt, theirKey...)
 	salt = append(salt, ourKey...)
 
-	h := hkdf.New(sha256.New, sharedSecret.X().Bytes(), salt, []byte(p256Label))
+	h := hkdf.New(sha256.New, sharedSecret.X.Buffer, salt, []byte(p256Label))
 	wrappingKey := make([]byte, chacha20poly1305.KeySize)
 	if _, err := io.ReadFull(h, wrappingKey); err != nil {
 		return nil, err
@@ -174,29 +289,6 @@ func DecryptTPM(tpm io.ReadWriteCloser, identity *Identity, remoteKey []byte, fi
 	}
 
 	return decrypted, nil
-}
-
-func DeleteHandle(tpm io.ReadWriteCloser, handle tpmutil.Handle) error {
-	if err := tpm2.EvictControl(tpm, "", tpm2.HandleOwner, handle, handle); err != nil {
-		return fmt.Errorf("failed EvictControl: %v", err)
-	}
-	return nil
-}
-
-func HandleToString(handle tpmutil.Handle) string {
-	return fmt.Sprintf("0x%x", handle)
-}
-
-func StringToHandle(handle string) (tpmutil.Handle, error) {
-	if !strings.HasPrefix(handle, "0x") {
-		return 0, fmt.Errorf("handle should be formatted as a hex-string with an 0x prefix")
-	}
-	hex := strings.TrimPrefix(handle, "0x")
-	value, err := strconv.ParseInt(hex, 16, 64)
-	if err != nil {
-		return 0, err
-	}
-	return tpmutil.Handle(value), nil
 }
 
 // Unmarshal a compressed ec key

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/foxboron/age-plugin-tpm/internal/bech32"
-	"github.com/google/go-tpm/tpmutil"
+	"github.com/google/go-tpm/tpm2"
 )
 
 // We need to know if the TPM handle has a pin set
@@ -34,8 +34,8 @@ func (p PINStatus) String() string {
 type Identity struct {
 	Version uint8
 	PIN     PINStatus
-	Private tpmutil.U16Bytes
-	Public  tpmutil.U16Bytes
+	Private tpm2.TPM2BPrivate
+	Public  tpm2.TPM2BPublic
 }
 
 func (i *Identity) Serialize() []any {
@@ -61,9 +61,18 @@ func DecodeIdentity(s string) (*Identity, error) {
 		}
 	}
 
-	if err := tpmutil.UnpackBuf(r, &key.Private, &key.Public); err != nil {
-		return nil, fmt.Errorf("failed unpacking buffer: %v", err)
+	public, err := tpm2.Unmarshal[tpm2.TPM2BPublic](r.Bytes())
+	if err != nil {
+		return nil, err
 	}
+
+	private, err := tpm2.Unmarshal[tpm2.TPM2BPrivate](r.Bytes()[len(public.Bytes())+2:])
+	if err != nil {
+		return nil, err
+	}
+
+	key.Public = *public
+	key.Private = *private
 
 	return &key, nil
 }
@@ -97,11 +106,11 @@ func EncodeIdentity(i *Identity) (string, error) {
 		}
 	}
 
-	packed, err := tpmutil.Pack(&i.Private, &i.Public)
-	if err != nil {
-		return "", fmt.Errorf("failed packing TPM key: %v", err)
-	}
-	b.Write(packed)
+	var pub []byte
+	pub = append(pub, tpm2.Marshal(i.Public)...)
+	pub = append(pub, tpm2.Marshal(i.Private)...)
+	b.Write(pub)
+
 	s, err := bech32.Encode(strings.ToUpper(IdentityPrefix), b.Bytes())
 	if err != nil {
 		return "", err

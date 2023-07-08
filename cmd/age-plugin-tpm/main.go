@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/foxboron/age-plugin-tpm/plugin"
-	"github.com/google/go-tpm/tpm2"
+	"github.com/google/go-tpm/tpm2/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -62,7 +62,7 @@ func SetLogger() {
 	plugin.SetLogger(w)
 }
 
-func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser, in io.Reader, out io.Writer) error {
+func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Writer) error {
 	switch {
 	case pluginOptions.Generate:
 		identity, recipient, err := plugin.CreateIdentity(tpm)
@@ -83,16 +83,19 @@ func RunCli(cmd *cobra.Command, tpm io.ReadWriteCloser, in io.Reader, out io.Wri
 			}
 		}
 	case pluginOptions.Convert:
+		srkHandle, _, err := plugin.CreateSRK(tpm)
+		if err != nil {
+			return err
+		}
 		identity, err := plugin.ParseIdentity(in)
 		if err != nil {
 			return err
 		}
-		handle, err := plugin.GetHandle(tpm, identity)
+		handle, err := plugin.GetHandle(tpm, *srkHandle, identity)
 		if err != nil {
 			return err
 		}
-		defer tpm2.FlushContext(tpm, handle)
-		pubkey := plugin.GetPubKey(tpm, handle)
+		pubkey := plugin.GetPubKey(tpm, handle.Handle)
 		return plugin.MarshalRecipient(pubkey, out)
 	default:
 		return cmd.Help()
@@ -170,7 +173,7 @@ parser:
 	return nil
 }
 
-func RunIdentityV1(tpm io.ReadWriteCloser, stdin io.Reader, stdout io.StringWriter) error {
+func RunIdentityV1(tpm transport.TPMCloser, stdin io.Reader, stdout io.StringWriter) error {
 	var entry string
 	identities := []string{}
 	scanner := bufio.NewScanner(stdin)
@@ -221,7 +224,12 @@ parser:
 				return err
 			}
 
-			key, err := plugin.DecryptTPM(tpm, k, sessionKey, wrappedKey)
+			srkHandle, _, err := plugin.CreateSRK(tpm)
+			if err != nil {
+				return err
+			}
+
+			key, err := plugin.DecryptTPM(tpm, *srkHandle, k, sessionKey, wrappedKey)
 			if err != nil {
 				return err
 			}
@@ -249,6 +257,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	tpm.Watch()
+	defer plugin.FlushHandles(tpm.TPM())
 	defer tpm.Close()
 
 	switch pluginOptions.AgePlugin {

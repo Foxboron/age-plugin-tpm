@@ -2,20 +2,19 @@ package plugin
 
 import (
 	"errors"
-	"io"
 	"os"
 	"os/signal"
 	"path"
 	"syscall"
 
 	"github.com/foxboron/swtpm_test"
-	"github.com/google/go-tpm/tpm2"
+	"github.com/google/go-tpm/tpm2/transport"
 )
 
 // Wrap swtpm and tpm into one device thing
 type TPMDevice struct {
 	isSwtpm bool
-	tpm     io.ReadWriteCloser
+	tpm     transport.TPMCloser
 	swtpm   *swtpm_test.Swtpm
 }
 
@@ -37,7 +36,7 @@ func (t *TPMDevice) Watch() {
 }
 
 // Return the TPM rwc
-func (t *TPMDevice) TPM() io.ReadWriteCloser {
+func (t *TPMDevice) TPM() transport.TPMCloser {
 	return t.tpm
 }
 
@@ -45,7 +44,7 @@ func (t *TPMDevice) TPM() io.ReadWriteCloser {
 func NewTPMDevice(tpmPath string, isSwtpm bool) (*TPMDevice, error) {
 	var err error
 	var swtpm *swtpm_test.Swtpm
-	var tpm io.ReadWriteCloser
+	var tpm transport.TPMCloser
 
 	if isSwtpm {
 		// We setup the dir in-case it's a tmp thingie
@@ -61,9 +60,9 @@ func NewTPMDevice(tpmPath string, isSwtpm bool) (*TPMDevice, error) {
 
 	// If we don't pass a path to OpenTPM then we have the tpmrm0 and tpm0 fallbacks
 	if tpmPath != "" {
-		tpm, err = tpm2.OpenTPM(tpmPath)
+		tpm, err = transport.OpenTPM(tpmPath)
 	} else {
-		tpm, err = tpm2.OpenTPM()
+		tpm, err = transport.OpenTPM()
 	}
 	if err != nil {
 		return nil, err

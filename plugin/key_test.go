@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpmutil"
 )
 
@@ -15,16 +16,40 @@ func mustPack(d []byte) []byte {
 	return packed
 }
 
+func mustPublic(data []byte) tpm2.TPM2BPublic {
+	tpmdata := tpm2.TPM2BData{
+		Buffer: data,
+	}
+	b := tpm2.Marshal(tpmdata)
+	ret, err := tpm2.Unmarshal[tpm2.TPM2BPublic](b)
+	if err != nil {
+		panic("cant marshal")
+	}
+	return *ret
+}
+
+func mustPrivate(data []byte) tpm2.TPM2BPrivate {
+	tpmdata := tpm2.TPM2BData{
+		Buffer: data,
+	}
+	b := tpm2.Marshal(tpmdata)
+	ret, err := tpm2.Unmarshal[tpm2.TPM2BPrivate](b)
+	if err != nil {
+		panic("cant marshal")
+	}
+	return *ret
+}
+
 var data = []struct {
 	key string
 	t   *Identity
 }{
 	{
-		key: "AGE-PLUGIN-TPM-1QYQQQPMSWF5HVCT5V5QQVUR4VFKXJCC456Q6X",
+		key: "AGE-PLUGIN-TPM-1QYQQQPNSW43XC6TRQQRHQUNFWESHGEGN0E0FM",
 		t: &Identity{
 			Version: 1,
-			Public:  mustPack([]byte("public")),
-			Private: mustPack([]byte("private")),
+			Public:  mustPublic([]byte("public")),
+			Private: mustPrivate([]byte("private")),
 		},
 	},
 }

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/foxboron/age-plugin-tpm/plugin"
-	"github.com/google/go-tpm/tpm2"
 	"github.com/spf13/cobra"
 )
 
@@ -43,6 +42,7 @@ func TestEncryptDecrypt(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v", err)
 		}
+		plugin.FlushHandles(tpm.TPM())
 	})
 
 	fileKey := []byte("test")
@@ -51,13 +51,17 @@ func TestEncryptDecrypt(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
-		handle, err := plugin.GetHandle(tpm.TPM(), identity)
+		srkHandle, _, err := plugin.CreateSRK(tpm.TPM())
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
-		defer tpm2.FlushContext(tpm.TPM(), handle)
 
-		pubkey := plugin.GetPubKey(tpm.TPM(), handle)
+		handle, err := plugin.GetHandle(tpm.TPM(), *srkHandle, identity)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+
+		pubkey := plugin.GetPubKey(tpm.TPM(), handle.Handle)
 		recipient := plugin.EncodeRecipient(pubkey)
 
 		stdin.WriteString("-> add-recipient ")
@@ -73,6 +77,7 @@ func TestEncryptDecrypt(t *testing.T) {
 		lines := strings.Split(output, "\n")
 		wrappedKey = strings.TrimSpace(lines[1])
 		sessionKey = strings.Split(lines[0], " ")[4]
+		plugin.FlushHandles(tpm.TPM())
 	})
 
 	t.Run("RunIdentitiyv1", func(t *testing.T) {
@@ -105,5 +110,6 @@ func TestEncryptDecrypt(t *testing.T) {
 		if !bytes.Equal(fileKey, out) {
 			t.Fatalf("RunIdentityV1 failed decryption")
 		}
+		plugin.FlushHandles(tpm.TPM())
 	})
 }
