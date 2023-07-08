@@ -65,22 +65,20 @@ func SetLogger() {
 func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Writer) error {
 	switch {
 	case pluginOptions.Generate:
+		if pluginOptions.OutputFile != "" && pluginOptions.OutputFile != "-" {
+			f, err := os.OpenFile(pluginOptions.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			out = f
+		}
 		identity, recipient, err := plugin.CreateIdentity(tpm)
 		if err != nil {
 			return err
 		}
 		if err = plugin.MarshalIdentity(identity, recipient, out); err != nil {
 			return err
-		}
-		if pluginOptions.OutputFile != "" {
-			f, err := os.OpenFile(pluginOptions.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			if err = plugin.MarshalIdentity(identity, recipient, f); err != nil {
-				return err
-			}
 		}
 	case pluginOptions.Convert:
 		srkHandle, _, err := plugin.CreateSRK(tpm)
