@@ -43,6 +43,15 @@ var data = []struct {
 			Private: mustPrivate([]byte("private")),
 		},
 	},
+	{
+		key: "AGE-PLUGIN-TPM-1QYQSQPNSW43XC6TRQQRHQUNFWESHGEGWKR32R",
+		t: &Identity{
+			Version: 1,
+			PIN:     HasPIN,
+			Public:  mustPublic([]byte("public")),
+			Private: mustPrivate([]byte("private")),
+		},
+	},
 }
 
 func TestIdentityIdentityGeneration(t *testing.T) {
