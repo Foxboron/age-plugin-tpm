@@ -5,16 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-tpm/tpm2"
-	"github.com/google/go-tpm/tpmutil"
 )
-
-func mustPack(d []byte) []byte {
-	packed, err := tpmutil.Pack(d)
-	if err != nil {
-		panic("couldn't pack")
-	}
-	return packed
-}
 
 func mustPublic(data []byte) tpm2.TPM2BPublic {
 	tpmdata := tpm2.TPM2BData{
