@@ -210,9 +210,16 @@ parser:
 	return nil
 }
 
+type Recipient struct {
+	SessionKey []byte
+	WrappedKey []byte
+	Recipient  *plugin.Identity
+}
+
 func RunIdentityV1(tpm transport.TPMCloser, stdin io.Reader, stdout io.StringWriter) error {
 	var entry string
 	identities := []string{}
+	recipients := []*Recipient{}
 	scanner := bufio.NewScanner(stdin)
 parser:
 	for scanner.Scan() {
@@ -260,23 +267,32 @@ parser:
 			if err != nil {
 				return err
 			}
-
-			srkHandle, _, err := plugin.CreateSRK(tpm)
-			if err != nil {
-				return err
-			}
-
-			key, err := plugin.DecryptTPM(tpm, *srkHandle, k, sessionKey, wrappedKey)
-			if err != nil {
-				return err
-			}
-			stdout.WriteString("-> file-key 0\n")
-			stdout.WriteString(b64Encode(key) + "\n")
+			recipients = append(recipients, &Recipient{
+				SessionKey: sessionKey,
+				WrappedKey: wrappedKey,
+				Recipient:  k,
+			})
 		case "done":
-			stdout.WriteString("-> done\n\n")
+			// Consume last new line?
+			scanner.Scan()
 			break parser
 		}
 	}
+
+	for n, recipient := range recipients {
+
+		srkHandle, _, err := plugin.CreateSRK(tpm)
+		if err != nil {
+			return err
+		}
+		key, err := plugin.DecryptTPM(tpm, *srkHandle, recipient.Recipient, recipient.SessionKey, recipient.WrappedKey)
+		if err != nil {
+			return err
+		}
+		stdout.WriteString(fmt.Sprintf("-> file-key %d\n", n))
+		stdout.WriteString(b64Encode([]byte(key)) + "\n")
+	}
+	stdout.WriteString("-> done\n\n")
 	return nil
 }
 
