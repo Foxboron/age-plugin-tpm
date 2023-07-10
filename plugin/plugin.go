@@ -269,7 +269,7 @@ func DecryptTPM(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Ident
 
 	ecdhRsp, err := ecdh.Execute(tpm,
 		tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
-			tpm2.AESEncryption(128, tpm2.EncryptIn),
+			tpm2.AESEncryption(128, tpm2.EncryptOut),
 			tpm2.Salted(srkHandle.Handle, *srkPublic)))
 	if err != nil {
 		return nil, fmt.Errorf("failed ecdhzgen: %v", err)
