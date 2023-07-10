@@ -331,7 +331,6 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	tpm.Watch()
-	defer plugin.FlushHandles(tpm.TPM())
 	defer tpm.Close()
 
 	switch pluginOptions.AgePlugin {

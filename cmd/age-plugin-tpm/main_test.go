@@ -43,7 +43,6 @@ func TestEncryptDecrypt(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v", err)
 		}
-		plugin.FlushHandles(tpm.TPM())
 	})
 
 	fileKey := []byte("test")
@@ -72,7 +71,6 @@ func TestEncryptDecrypt(t *testing.T) {
 		wrappedKey = strings.TrimSpace(lines[1])
 		tag = strings.Split(lines[0], " ")[4]
 		sessionKey = strings.Split(lines[0], " ")[5]
-		plugin.FlushHandles(tpm.TPM())
 	})
 
 	t.Run("RunIdentitiyv1", func(t *testing.T) {
@@ -105,6 +103,5 @@ func TestEncryptDecrypt(t *testing.T) {
 		if !bytes.Equal(fileKey, out) {
 			t.Fatalf("RunIdentityV1 failed decryption")
 		}
-		plugin.FlushHandles(tpm.TPM())
 	})
 }

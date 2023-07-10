@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 
 	"github.com/google/go-tpm/tpm2"
@@ -25,58 +24,8 @@ const (
 	IdentityPrefix  = "age-plugin-tpm-"
 )
 
-var (
-	// Save all handles so we flush them at all when the application exists
-	handles = map[string]tpm2.TPMHandle{}
-)
-
-func AddHandle(handle tpm2.TPMHandle, desc string) {
-	handles[desc] = handle
-
-}
-
-func FlushHandles(tpm transport.TPMCloser) error {
-	var errs error
-	for desc, handle := range handles {
-		flush := tpm2.FlushContext{
-			FlushHandle: handle,
-		}
-		_, err := flush.Execute(tpm)
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed flushing handle %s", desc))
-		}
-		delete(handles, desc)
-	}
-	return errs
-}
-
-func HasHandle(desc string) (tpm2.TPMHandle, bool) {
-	handle, ok := handles[desc]
-	return handle, ok
-}
-
 // Creates a Storage Key, or return the loaded storage key
 func CreateSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
-	if handle, ok := HasHandle("srk handle"); ok {
-		readPublic := tpm2.ReadPublic{
-			ObjectHandle: handle,
-		}
-		rsp, err := readPublic.Execute(tpm)
-		if err != nil {
-			log.Fatalf("failed creating ECDH key from tpm: %v", err)
-		}
-		srkPublic, err := rsp.OutPublic.Contents()
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed getting srk public content: %v", err)
-		}
-		return &tpm2.AuthHandle{
-			Handle: handle,
-			Name:   rsp.Name,
-			Auth:   tpm2.PasswordAuth([]byte("")),
-		}, srkPublic, nil
-
-	}
-
 	srk := tpm2.CreatePrimary{
 		PrimaryHandle: tpm2.TPMRHOwner,
 		InSensitive: tpm2.TPM2BSensitiveCreate{
@@ -94,8 +43,6 @@ func CreateSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, err
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed creating primary key: %v", err)
 	}
-
-	AddHandle(rsp.ObjectHandle, "srk handle")
 
 	srkPublic, err := rsp.OutPublic.Contents()
 	if err != nil {
