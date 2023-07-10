@@ -232,7 +232,7 @@ func GetPubKey(tpm transport.TPMCloser, handle tpm2.TPMHandle) *ecdh.PublicKey {
 	return ecdhKey
 }
 
-func DecryptTPM(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Identity, remoteKey []byte, fileKey []byte) ([]byte, error) {
+func DecryptTPM(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Identity, remoteKey, fileKey, pin []byte) ([]byte, error) {
 	x, y, sessionKey, err := UnmarshalCompressedECDH(remoteKey)
 	if err != nil {
 		return nil, err
@@ -252,7 +252,7 @@ func DecryptTPM(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Ident
 		KeyHandle: tpm2.AuthHandle{
 			Handle: handle.Handle,
 			Name:   handle.Name,
-			Auth:   tpm2.PasswordAuth([]byte("")),
+			Auth:   tpm2.PasswordAuth(pin),
 		},
 		InPoint: tpm2.New2B(swPub),
 	}

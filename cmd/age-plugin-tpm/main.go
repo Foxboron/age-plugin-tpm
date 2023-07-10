@@ -280,12 +280,31 @@ parser:
 	}
 
 	for n, recipient := range recipients {
+		var pin []byte
+
+		if recipient.Recipient.PIN == plugin.HasPIN {
+			stdout.WriteString("-> request-secret test\n")
+			stdout.WriteString(b64Encode([]byte("Please enter the PIN for the key:")) + "\n")
+		loop:
+			for scanner.Scan() {
+				switch scanner.Text() {
+				case "-> ok":
+					scanner.Scan()
+					entry, err := b64Decode(scanner.Text())
+					if err != nil {
+						return err
+					}
+					pin = entry
+					break loop
+				}
+			}
+		}
 
 		srkHandle, _, err := plugin.CreateSRK(tpm)
 		if err != nil {
 			return err
 		}
-		key, err := plugin.DecryptTPM(tpm, *srkHandle, recipient.Recipient, recipient.SessionKey, recipient.WrappedKey)
+		key, err := plugin.DecryptTPM(tpm, *srkHandle, recipient.Recipient, recipient.SessionKey, recipient.WrappedKey, pin)
 		if err != nil {
 			return err
 		}
