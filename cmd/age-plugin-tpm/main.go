@@ -13,6 +13,7 @@ import (
 	"github.com/foxboron/age-plugin-tpm/plugin"
 	"github.com/google/go-tpm/tpm2/transport"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 type PluginOptions struct {
@@ -24,6 +25,7 @@ type PluginOptions struct {
 	Encrypt    bool
 	OutputFile string
 	LogFile    string
+	PIN        bool
 }
 
 var example = `
@@ -62,9 +64,45 @@ func SetLogger() {
 	plugin.SetLogger(w)
 }
 
+func clearLine(out io.Writer) {
+	const (
+		CUI = "\033["   // Control Sequence Introducer
+		CPL = CUI + "F" // Cursor Previous Line
+		EL  = CUI + "K" // Erase in Line
+	)
+	fmt.Fprintf(out, "\r\n"+CPL+EL)
+}
+
+func GetPin(prompt string) ([]byte, error) {
+	fmt.Printf("%s ", prompt)
+	return term.ReadPassword(int(os.Stdin.Fd()))
+}
+
 func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Writer) error {
+	var pin []byte
+	var err error
 	switch {
 	case pluginOptions.Generate:
+
+		if pluginOptions.PIN {
+			pin, err = GetPin("Enter pin for key:")
+			if err != nil {
+				return err
+			}
+
+			clearLine(os.Stdin)
+
+			confirm, err := GetPin("Confirm pin:")
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(pin, confirm) {
+				return fmt.Errorf("pins didn't match")
+			}
+		} else if s := os.Getenv("AGE_TPM_PIN"); s != "" {
+			pin = []byte(s)
+		}
+
 		if pluginOptions.OutputFile != "" && pluginOptions.OutputFile != "-" {
 			f, err := os.OpenFile(pluginOptions.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 			if err != nil {
@@ -73,7 +111,8 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 			defer f.Close()
 			out = f
 		}
-		identity, recipient, err := plugin.CreateIdentity(tpm)
+
+		identity, recipient, err := plugin.CreateIdentity(tpm, pin)
 		if err != nil {
 			return err
 		}
@@ -287,6 +326,7 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 	flags.StringVarP(&pluginOptions.OutputFile, "output", "o", "", "Write the result to the file.")
 
 	flags.BoolVarP(&pluginOptions.Generate, "generate", "g", false, "Generate a identity.")
+	flags.BoolVarP(&pluginOptions.PIN, "pin", "p", false, "Include a pin with the key.")
 
 	// Debug or logging stuff
 	flags.StringVar(&pluginOptions.LogFile, "log-file", "", "Logging file for debug output")

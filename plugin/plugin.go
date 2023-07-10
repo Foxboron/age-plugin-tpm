@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -142,13 +143,26 @@ func CreateSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, err
 	}, srkPublic, nil
 }
 
-func CreateIdentity(tpm transport.TPMCloser) (*Identity, string, error) {
+func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, string, error) {
 	srkHandle, srkPublic, err := CreateSRK(tpm)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed creating SRK: %v", err)
 	}
 
 	eccKeyTemplate.ParentHandle = srkHandle
+
+	pinstatus := NoPIN
+
+	if !bytes.Equal(pin, []byte("")) {
+		eccKeyTemplate.InSensitive = tpm2.TPM2BSensitiveCreate{
+			Sensitive: &tpm2.TPMSSensitiveCreate{
+				UserAuth: tpm2.TPM2BAuth{
+					Buffer: pin,
+				},
+			},
+		}
+		pinstatus = HasPIN
+	}
 
 	var eccRsp *tpm2.CreateResponse
 	eccRsp, err = eccKeyTemplate.Execute(tpm,
@@ -161,7 +175,7 @@ func CreateIdentity(tpm transport.TPMCloser) (*Identity, string, error) {
 
 	identity := &Identity{
 		Version: 1,
-		PIN:     HasPIN,
+		PIN:     pinstatus,
 		Private: eccRsp.OutPrivate,
 		Public:  eccRsp.OutPublic,
 	}
