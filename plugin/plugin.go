@@ -115,6 +115,9 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, string, err
 		return nil, "", fmt.Errorf("failed creating SRK: %v", err)
 	}
 
+	flushSrk := tpm2.FlushContext{FlushHandle: srkHandle}
+	defer flushSrk.Execute(tpm)
+
 	eccKey := tpm2.Create{
 		ParentHandle: srkHandle,
 		InPublic: tpm2.New2B(tpm2.TPMTPublic{
@@ -174,16 +177,33 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, string, err
 		Public:  eccRsp.OutPublic,
 	}
 
-	handle, err := GetHandle(tpm, *srkHandle, identity)
+	handle, err := LoadIdentityWithParent(tpm, *srkHandle, identity)
 	if err != nil {
 		return nil, "", err
 	}
 
-	pubkey := GetPubKey(tpm, handle.Handle)
+	flushIdentity := tpm2.FlushContext{FlushHandle: handle.Handle}
+	defer flushIdentity.Execute(tpm)
+
+	pubkey, err := GetPubkeyWithHandle(tpm, handle.Handle)
+	if err != nil {
+		return nil, "", err
+	}
 	return identity, EncodeRecipient(pubkey), nil
 }
 
-func GetHandle(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Identity) (*tpm2.NamedHandle, error) {
+func LoadIdentity(tpm transport.TPMCloser, identity *Identity) (*tpm2.NamedHandle, error) {
+	srkHandle, _, err := CreateSRK(tpm)
+	if err != nil {
+		return nil, err
+	}
+
+	flushSrk := tpm2.FlushContext{FlushHandle: srkHandle}
+	defer flushSrk.Execute(tpm)
+	return LoadIdentityWithParent(tpm, *srkHandle, identity)
+}
+
+func LoadIdentityWithParent(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Identity) (*tpm2.NamedHandle, error) {
 	loadBlobCmd := tpm2.Load{
 		ParentHandle: parent,
 		InPrivate:    identity.Private,
@@ -193,44 +213,54 @@ func GetHandle(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Identi
 	if err != nil {
 		return nil, fmt.Errorf("failed getting handle: %v", err)
 	}
-	AddHandle(loadBlobRsp.ObjectHandle, "loaded identity handle")
+
 	return &tpm2.NamedHandle{
 		Handle: loadBlobRsp.ObjectHandle,
 		Name:   loadBlobRsp.Name,
 	}, nil
 }
 
-func GetPubKey(tpm transport.TPMCloser, handle tpm2.TPMHandle) *ecdh.PublicKey {
+func GetPubkey(tpm transport.TPMCloser, identity *Identity) (*ecdh.PublicKey, error) {
+	handle, err := LoadIdentity(tpm, identity)
+	if err != nil {
+		return nil, err
+	}
+	flushIdentity := tpm2.FlushContext{FlushHandle: handle.Handle}
+	defer flushIdentity.Execute(tpm)
+	return GetPubkeyWithHandle(tpm, handle.Handle)
+}
+
+func GetPubkeyWithHandle(tpm transport.TPMCloser, handle tpm2.TPMHandle) (*ecdh.PublicKey, error) {
 	readPublic := tpm2.ReadPublic{
 		ObjectHandle: handle,
 	}
 	rspRP, err := readPublic.Execute(tpm)
 	if err != nil {
-		log.Fatalf("failed creating ECDH key from tpm: %v", err)
+		return nil, fmt.Errorf("failed creating ECDH key from tpm: %v", err)
 	}
 	pubRead, err := rspRP.OutPublic.Contents()
 	if err != nil {
-		log.Fatalf("failed creating ECDH key from tpm: %v", err)
+		return nil, fmt.Errorf("failed creating ECDH key from tpm: %v", err)
 	}
 	eccRead, err := pubRead.Unique.ECC()
 	if err != nil {
-		log.Fatalf("failed creating ECDH key from tpm: %v", err)
+		return nil, fmt.Errorf("failed creating ECDH key from tpm: %v", err)
 	}
 	ecdhKey, err := ecdh.P256().NewPublicKey(elliptic.Marshal(elliptic.P256(),
 		big.NewInt(0).SetBytes(eccRead.X.Buffer),
 		big.NewInt(0).SetBytes(eccRead.Y.Buffer),
 	))
 	if err != nil {
-		log.Fatalf("failed creating ECDH key from tpm: %v", err)
+		return nil, fmt.Errorf("failed creating ECDH key from tpm: %v", err)
 	}
-	return ecdhKey
+	return ecdhKey, nil
 }
 
 var (
 	ErrWrongTag = errors.New("wrong public key tag")
 )
 
-func DecryptTPM(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Identity, remoteKey, fileKey, tag, pin []byte) ([]byte, error) {
+func DecryptTPM(tpm transport.TPMCloser, identity *Identity, remoteKey, fileKey, tag, pin []byte) ([]byte, error) {
 	x, y, sessionKey, err := UnmarshalCompressedECDH(remoteKey)
 	if err != nil {
 		return nil, err
@@ -241,12 +271,17 @@ func DecryptTPM(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Ident
 		Y: tpm2.TPM2BECCParameter{Buffer: y.FillBytes(make([]byte, 32))},
 	}
 
-	handle, err := GetHandle(tpm, parent, identity)
+	handle, err := LoadIdentity(tpm, identity)
 	if err != nil {
 		return nil, err
 	}
+	flushIdentity := tpm2.FlushContext{FlushHandle: handle.Handle}
+	defer flushIdentity.Execute(tpm)
 
-	pubkey := GetPubKey(tpm, handle.Handle)
+	pubkey, err := GetPubkeyWithHandle(tpm, handle.Handle)
+	if err != nil {
+		return nil, err
+	}
 
 	pubkeyTag := GetTag(pubkey)
 	if !bytes.Equal(pubkeyTag, tag) {
@@ -266,6 +301,9 @@ func DecryptTPM(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Ident
 	if err != nil {
 		return nil, fmt.Errorf("failed getting srk: %v", err)
 	}
+
+	flushSrk := tpm2.FlushContext{FlushHandle: srkHandle}
+	defer flushSrk.Execute(tpm)
 
 	ecdhRsp, err := ecdh.Execute(tpm,
 		tpm2.HMAC(tpm2.TPMAlgSHA256, 16,

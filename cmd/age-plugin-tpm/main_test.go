@@ -52,17 +52,10 @@ func TestEncryptDecrypt(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
-		srkHandle, _, err := plugin.CreateSRK(tpm.TPM())
+		pubkey, err := plugin.GetPubkey(tpm.TPM(), identity)
 		if err != nil {
-			t.Fatalf("err: %v", err)
+			t.Fatalf("failed getting public key: %v", err)
 		}
-
-		handle, err := plugin.GetHandle(tpm.TPM(), *srkHandle, identity)
-		if err != nil {
-			t.Fatalf("err: %v", err)
-		}
-
-		pubkey := plugin.GetPubKey(tpm.TPM(), handle.Handle)
 		recipient := plugin.EncodeRecipient(pubkey)
 
 		stdin.WriteString("-> add-recipient ")

@@ -121,19 +121,14 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 			return err
 		}
 	case pluginOptions.Convert:
-		srkHandle, _, err := plugin.CreateSRK(tpm)
-		if err != nil {
-			return err
-		}
 		identity, err := plugin.ParseIdentity(in)
 		if err != nil {
 			return err
 		}
-		handle, err := plugin.GetHandle(tpm, *srkHandle, identity)
+		pubkey, err := plugin.GetPubkey(tpm, identity)
 		if err != nil {
 			return err
 		}
-		pubkey := plugin.GetPubKey(tpm, handle.Handle)
 		return plugin.MarshalRecipient(pubkey, out)
 	default:
 		return cmd.Help()
@@ -309,12 +304,7 @@ parser:
 			}
 		}
 
-		srkHandle, _, err := plugin.CreateSRK(tpm)
-		if err != nil {
-			return err
-		}
-
-		key, err := plugin.DecryptTPM(tpm, *srkHandle, recipient.Recipient, recipient.SessionKey, recipient.WrappedKey, recipient.Tag, pin)
+		key, err := plugin.DecryptTPM(tpm, recipient.Recipient, recipient.SessionKey, recipient.WrappedKey, recipient.Tag, pin)
 		if errors.Is(err, plugin.ErrWrongTag) {
 			continue
 		} else if err != nil {
