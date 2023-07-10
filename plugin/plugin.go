@@ -280,7 +280,7 @@ func DecryptTPM(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Ident
 		return nil, fmt.Errorf("failed getting ecdh point: %v", err)
 	}
 
-	ourKey := GetPubKey(tpm, handle.Handle).Bytes()
+	ourKey := pubkey.Bytes()
 	theirKey := sessionKey.Bytes()
 
 	salt := make([]byte, 0, len(theirKey)+len(ourKey))
