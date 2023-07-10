@@ -8,27 +8,13 @@ import (
 )
 
 func mustPublic(data []byte) tpm2.TPM2BPublic {
-	tpmdata := tpm2.TPM2BData{
-		Buffer: data,
-	}
-	b := tpm2.Marshal(tpmdata)
-	ret, err := tpm2.Unmarshal[tpm2.TPM2BPublic](b)
-	if err != nil {
-		panic("cant marshal")
-	}
-	return *ret
+	return tpm2.BytesAs2B[tpm2.TPMTPublic](data)
 }
 
 func mustPrivate(data []byte) tpm2.TPM2BPrivate {
-	tpmdata := tpm2.TPM2BData{
+	return tpm2.TPM2BPrivate{
 		Buffer: data,
 	}
-	b := tpm2.Marshal(tpmdata)
-	ret, err := tpm2.Unmarshal[tpm2.TPM2BPrivate](b)
-	if err != nil {
-		panic("cant marshal")
-	}
-	return *ret
 }
 
 var data = []struct {
