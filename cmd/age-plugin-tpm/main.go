@@ -204,10 +204,11 @@ parser:
 				stdout.WriteString(b64Encode(b) + "\n")
 			}
 		case "done":
-			stdout.WriteString("-> done\n\n")
 			break parser
 		}
 	}
+
+	stdout.WriteString("-> done\n\n")
 	return nil
 }
 
