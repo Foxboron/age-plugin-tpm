@@ -335,10 +335,18 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 	switch pluginOptions.AgePlugin {
 	case "recipient-v1":
 		plugin.Log.Println("Got recipient-v1")
-		return RunRecipientV1(os.Stdin, os.Stdout)
+		if err := RunRecipientV1(os.Stdin, os.Stdout); err != nil {
+			os.Stdout.WriteString("-> error\n")
+			os.Stdout.WriteString(b64Encode([]byte(err.Error())) + "\n")
+			return err
+		}
 	case "identity-v1":
 		plugin.Log.Println("Got identity-v1")
-		return RunIdentityV1(tpm.TPM(), os.Stdin, os.Stdout)
+		if err := RunIdentityV1(tpm.TPM(), os.Stdin, os.Stdout); err != nil {
+			os.Stdout.WriteString("-> error\n")
+			os.Stdout.WriteString(b64Encode([]byte(err.Error())) + "\n")
+			return err
+		}
 	default:
 		in := os.Stdin
 		if inFile := cmd.Flags().Arg(0); inFile != "" && inFile != "-" {
@@ -351,6 +359,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 		}
 		return RunCli(cmd, tpm.TPM(), in, os.Stdout)
 	}
+	return nil
 }
 
 func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
