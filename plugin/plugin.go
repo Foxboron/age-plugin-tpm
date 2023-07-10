@@ -25,52 +25,6 @@ const (
 	IdentityPrefix  = "age-plugin-tpm-"
 )
 
-// TPM Variables
-var (
-
-	// Default SRK handle
-	srkTemplate = tpm2.CreatePrimary{
-		PrimaryHandle: tpm2.TPMRHOwner,
-		InSensitive: tpm2.TPM2BSensitiveCreate{
-			Sensitive: &tpm2.TPMSSensitiveCreate{
-				UserAuth: tpm2.TPM2BAuth{
-					Buffer: []byte(nil),
-				},
-			},
-		},
-		InPublic: tpm2.New2B(tpm2.ECCSRKTemplate),
-	}
-
-	eccKeyTemplate = tpm2.Create{
-		InPublic: tpm2.New2B(tpm2.TPMTPublic{
-			Type:    tpm2.TPMAlgECC,
-			NameAlg: tpm2.TPMAlgSHA256,
-			ObjectAttributes: tpm2.TPMAObject{
-				FixedTPM:            true,
-				FixedParent:         true,
-				SensitiveDataOrigin: true,
-				UserWithAuth:        true,
-				Decrypt:             true,
-			},
-			Parameters: tpm2.NewTPMUPublicParms(
-				tpm2.TPMAlgECC,
-				&tpm2.TPMSECCParms{
-					CurveID: tpm2.TPMECCNistP256,
-					Scheme: tpm2.TPMTECCScheme{
-						Scheme: tpm2.TPMAlgECDH,
-						Details: tpm2.NewTPMUAsymScheme(
-							tpm2.TPMAlgECDH,
-							&tpm2.TPMSKeySchemeECDH{
-								HashAlg: tpm2.TPMAlgSHA256,
-							},
-						),
-					},
-				},
-			),
-		}),
-	}
-)
-
 var (
 	// Save all handles so we flush them at all when the application exists
 	handles = map[string]tpm2.TPMHandle{}
@@ -123,8 +77,20 @@ func CreateSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, err
 
 	}
 
+	srk := tpm2.CreatePrimary{
+		PrimaryHandle: tpm2.TPMRHOwner,
+		InSensitive: tpm2.TPM2BSensitiveCreate{
+			Sensitive: &tpm2.TPMSSensitiveCreate{
+				UserAuth: tpm2.TPM2BAuth{
+					Buffer: []byte(nil),
+				},
+			},
+		},
+		InPublic: tpm2.New2B(tpm2.ECCSRKTemplate),
+	}
+
 	var rsp *tpm2.CreatePrimaryResponse
-	rsp, err := srkTemplate.Execute(tpm)
+	rsp, err := srk.Execute(tpm)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed creating primary key: %v", err)
 	}
@@ -149,12 +115,40 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, string, err
 		return nil, "", fmt.Errorf("failed creating SRK: %v", err)
 	}
 
-	eccKeyTemplate.ParentHandle = srkHandle
+	eccKey := tpm2.Create{
+		ParentHandle: srkHandle,
+		InPublic: tpm2.New2B(tpm2.TPMTPublic{
+			Type:    tpm2.TPMAlgECC,
+			NameAlg: tpm2.TPMAlgSHA256,
+			ObjectAttributes: tpm2.TPMAObject{
+				FixedTPM:            true,
+				FixedParent:         true,
+				SensitiveDataOrigin: true,
+				UserWithAuth:        true,
+				Decrypt:             true,
+			},
+			Parameters: tpm2.NewTPMUPublicParms(
+				tpm2.TPMAlgECC,
+				&tpm2.TPMSECCParms{
+					CurveID: tpm2.TPMECCNistP256,
+					Scheme: tpm2.TPMTECCScheme{
+						Scheme: tpm2.TPMAlgECDH,
+						Details: tpm2.NewTPMUAsymScheme(
+							tpm2.TPMAlgECDH,
+							&tpm2.TPMSKeySchemeECDH{
+								HashAlg: tpm2.TPMAlgSHA256,
+							},
+						),
+					},
+				},
+			),
+		}),
+	}
 
 	pinstatus := NoPIN
 
 	if !bytes.Equal(pin, []byte("")) {
-		eccKeyTemplate.InSensitive = tpm2.TPM2BSensitiveCreate{
+		eccKey.InSensitive = tpm2.TPM2BSensitiveCreate{
 			Sensitive: &tpm2.TPMSSensitiveCreate{
 				UserAuth: tpm2.TPM2BAuth{
 					Buffer: pin,
@@ -165,7 +159,7 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, string, err
 	}
 
 	var eccRsp *tpm2.CreateResponse
-	eccRsp, err = eccKeyTemplate.Execute(tpm,
+	eccRsp, err = eccKey.Execute(tpm,
 		tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
 			tpm2.AESEncryption(128, tpm2.EncryptIn),
 			tpm2.Salted(srkHandle.Handle, *srkPublic)))
