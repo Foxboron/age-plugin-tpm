@@ -240,15 +240,6 @@ parser:
 			entry = strings.TrimPrefix(entry, "-> ")
 			stanza := strings.Split(entry, " ")
 
-			tag, err := b64Decode(stanza[3])
-			if err != nil {
-				return fmt.Errorf("failed base64 decode session key: %v", err)
-			}
-
-			sessionKey, err := b64Decode(stanza[4])
-			if err != nil {
-				return fmt.Errorf("failed base64 decode session key: %v", err)
-			}
 			// The bytes are truncated to 64 pr line
 			WrappedKeyS := ""
 			for scanner.Scan() {
@@ -257,6 +248,28 @@ parser:
 				if len(entry) < 64 {
 					break
 				}
+			}
+
+			// We need at least 5 elements
+			if len(stanza) > 5 {
+				plugin.Log.Println("wrong number of arguments")
+				continue
+			}
+
+			// We only understand "tpm-ecc" stanzas
+			if stanza[2] != "tpm-ecc" {
+				plugin.Log.Println("not a tpm-ecc key")
+				continue
+			}
+
+			tag, err := b64Decode(stanza[3])
+			if err != nil {
+				return fmt.Errorf("failed base64 decode session key: %v", err)
+			}
+
+			sessionKey, err := b64Decode(stanza[4])
+			if err != nil {
+				return fmt.Errorf("failed base64 decode session key: %v", err)
 			}
 
 			plugin.Log.Printf("read wrapped key: %s", WrappedKeyS)
