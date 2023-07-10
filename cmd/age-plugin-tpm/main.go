@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -190,7 +191,7 @@ parser:
 				return err
 			}
 
-			stdout.WriteString(fmt.Sprintf("-> recipient-stanza 0 tpm-ecc %s\n", b64Encode(sessionKey)))
+			stdout.WriteString(fmt.Sprintf("-> recipient-stanza 0 tpm-ecc %s %s\n", b64Encode(plugin.GetTag(pubkey)), b64Encode(sessionKey)))
 
 			// We can only write 48 bytes pr line
 			// chunk the output before b64 encoding it
@@ -213,6 +214,7 @@ parser:
 type Recipient struct {
 	SessionKey []byte
 	WrappedKey []byte
+	Tag        []byte
 	Recipient  *plugin.Identity
 }
 
@@ -242,7 +244,12 @@ parser:
 			entry = strings.TrimPrefix(entry, "-> ")
 			stanza := strings.Split(entry, " ")
 
-			sessionKey, err := b64Decode(stanza[3])
+			tag, err := b64Decode(stanza[3])
+			if err != nil {
+				return fmt.Errorf("failed base64 decode session key: %v", err)
+			}
+
+			sessionKey, err := b64Decode(stanza[4])
 			if err != nil {
 				return fmt.Errorf("failed base64 decode session key: %v", err)
 			}
@@ -270,6 +277,7 @@ parser:
 			recipients = append(recipients, &Recipient{
 				SessionKey: sessionKey,
 				WrappedKey: wrappedKey,
+				Tag:        tag,
 				Recipient:  k,
 			})
 		case "done":
@@ -279,7 +287,7 @@ parser:
 		}
 	}
 
-	for n, recipient := range recipients {
+	for _, recipient := range recipients {
 		var pin []byte
 
 		if recipient.Recipient.PIN == plugin.HasPIN {
@@ -304,11 +312,14 @@ parser:
 		if err != nil {
 			return err
 		}
-		key, err := plugin.DecryptTPM(tpm, *srkHandle, recipient.Recipient, recipient.SessionKey, recipient.WrappedKey, pin)
-		if err != nil {
+
+		key, err := plugin.DecryptTPM(tpm, *srkHandle, recipient.Recipient, recipient.SessionKey, recipient.WrappedKey, recipient.Tag, pin)
+		if errors.Is(err, plugin.ErrWrongTag) {
+			continue
+		} else if err != nil {
 			return err
 		}
-		stdout.WriteString(fmt.Sprintf("-> file-key %d\n", n))
+		stdout.WriteString("-> file-key 0\n")
 		stdout.WriteString(b64Encode([]byte(key)) + "\n")
 	}
 	stdout.WriteString("-> done\n\n")

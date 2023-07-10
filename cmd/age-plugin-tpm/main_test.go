@@ -14,6 +14,7 @@ import (
 func TestEncryptDecrypt(t *testing.T) {
 	var wrappedKey string
 	var sessionKey string
+	var tag string
 
 	var identity *plugin.Identity
 
@@ -76,7 +77,8 @@ func TestEncryptDecrypt(t *testing.T) {
 		output := strings.TrimSpace(stdout.String())
 		lines := strings.Split(output, "\n")
 		wrappedKey = strings.TrimSpace(lines[1])
-		sessionKey = strings.Split(lines[0], " ")[4]
+		tag = strings.Split(lines[0], " ")[4]
+		sessionKey = strings.Split(lines[0], " ")[5]
 		plugin.FlushHandles(tpm.TPM())
 	})
 
@@ -90,7 +92,7 @@ func TestEncryptDecrypt(t *testing.T) {
 		}
 
 		stdin.WriteString(fmt.Sprintf("-> add-identity %s\n", encoded))
-		stdin.WriteString(fmt.Sprintf("-> recipient-stanza 0 tpm-ecc %s\n", sessionKey))
+		stdin.WriteString(fmt.Sprintf("-> recipient-stanza 0 tpm-ecc %s %s\n", tag, sessionKey))
 		stdin.WriteString(wrappedKey + "\n")
 		stdin.WriteString("-> done\n")
 

@@ -49,6 +49,11 @@ func DecodeRecipient(s string) (*ecdh.PublicKey, error) {
 	return ecdhKey, nil
 }
 
+func GetTag(e *ecdh.PublicKey) []byte {
+	sum := sha256.Sum256(e.Bytes())
+	return sum[:4]
+}
+
 const p256Label = "age-encryption.org/v1/tpm-p256"
 
 // Wraps the file key in a session key
