@@ -1,8 +1,15 @@
-# TPM plugin for age clients
+TPM plugin for age clients
+==========================
 
 `age-plugin-tpm` is a plugin for [age](https://age-encryption.org/v1) clients
 like [`age`](https://age-encryption.org) and [`rage`](https://str4d.xyz/rage),
-which enables files to be encrypted to age identities stored on YubiKeys.
+which enables files to be encrypted to age identities sealed by the TPM.
+
+# Features
+
+* Keys created on the TPM, sealed outside of it
+* PIN support
+* TPM session encryption
 
 # Experimental
 
@@ -30,11 +37,24 @@ the follow go command.
 ```bash
 # Create identity
 $ age-plugin-tpm --generate -o age-identity.txt
+$ age-plugin-tpm -y age-identity.txt > age-recipient.txt
+
+# Encrypt / Decrypt something
+$ echo "Hack The Planet" | age -R ./age-recipient.txt -o test-decrypt.txt
+$ age --decrypt -i ./age-identity.txt -o - test-decrypt.txt
+Hack The Planet!
+```
+
+### With PIN
+
+```bash
+# Create identity
+$ AGE_TPM_PIN=123 age-plugin-tpm --generate --pin -o age-identity.txt
 $ age-plugin-tpm -y age-identity > age-recipient.txt
 
 # Encrypt / Decrypt something
-$ echo "Hack The Planet!" | age -R ./age-recipient.txt -o test-decrypt.txt
-$ age --decrypt -i ./age-identity.txt -o - test-decrypt.txt
+$ echo "Hack The Planet" | age -R ./age-recipient.txt -o test-decrypt.txt
+$ AGE_TPM_PIN=123 age --decrypt -i ./age-identity.txt -o - test-decrypt.txt
 Hack The Planet!
 ```
 
@@ -60,4 +80,3 @@ age1tpm1qg86fn5esp30u9h6jy6zvu9gcsvnac09vn8jzjxt8s3qtlcv5h2x287wm36
 ## License
 
 Licensed under the MIT license. See [LICENSE](LICENSE) or http://opensource.org/licenses/MIT
-
