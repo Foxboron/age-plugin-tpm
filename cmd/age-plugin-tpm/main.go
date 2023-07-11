@@ -85,24 +85,25 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 	case pluginOptions.Generate:
 
 		if pluginOptions.PIN {
-			pin, err = GetPin("Enter pin for key:")
-			if err != nil {
-				return err
-			}
+			if s := os.Getenv("AGE_TPM_PIN"); s != "" {
+				pin = []byte(s)
+			} else {
+				pin, err = GetPin("Enter pin for key:")
+				if err != nil {
+					return err
+				}
 
-			clearLine(os.Stdin)
+				clearLine(os.Stdin)
 
-			confirm, err := GetPin("Confirm pin:")
-			if err != nil {
-				return err
+				confirm, err := GetPin("Confirm pin:")
+				if err != nil {
+					return err
+				}
+				if !bytes.Equal(pin, confirm) {
+					return fmt.Errorf("pins didn't match")
+				}
 			}
-			if !bytes.Equal(pin, confirm) {
-				return fmt.Errorf("pins didn't match")
-			}
-		} else if s := os.Getenv("AGE_TPM_PIN"); s != "" {
-			pin = []byte(s)
 		}
-
 		if pluginOptions.OutputFile != "" && pluginOptions.OutputFile != "-" {
 			f, err := os.OpenFile(pluginOptions.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 			if err != nil {
