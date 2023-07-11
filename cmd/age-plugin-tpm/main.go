@@ -299,19 +299,23 @@ parser:
 		var pin []byte
 
 		if recipient.Recipient.PIN == plugin.HasPIN {
-			stdout.WriteString("-> request-secret test\n")
-			stdout.WriteString(b64Encode([]byte("Please enter the PIN for the key:")) + "\n")
-		loop:
-			for scanner.Scan() {
-				switch scanner.Text() {
-				case "-> ok":
-					scanner.Scan()
-					entry, err := b64Decode(scanner.Text())
-					if err != nil {
-						return err
+			if s := os.Getenv("AGE_TPM_PIN"); s != "" {
+				pin = []byte(s)
+			} else {
+				stdout.WriteString("-> request-secret tpm\n")
+				stdout.WriteString(b64Encode([]byte("Please enter the PIN for the key:")) + "\n")
+			loop:
+				for scanner.Scan() {
+					switch scanner.Text() {
+					case "-> ok":
+						scanner.Scan()
+						entry, err := b64Decode(scanner.Text())
+						if err != nil {
+							return err
+						}
+						pin = entry
+						break loop
 					}
-					pin = entry
-					break loop
 				}
 			}
 		}
@@ -383,7 +387,7 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 	flags.StringVarP(&pluginOptions.OutputFile, "output", "o", "", "Write the result to the file.")
 
 	flags.BoolVarP(&pluginOptions.Generate, "generate", "g", false, "Generate a identity.")
-	flags.BoolVarP(&pluginOptions.PIN, "pin", "p", false, "Include a pin with the key.")
+	flags.BoolVarP(&pluginOptions.PIN, "pin", "p", false, "Include a pin with the key. Alternatively export AGE_TPM_PIN.")
 
 	// Debug or logging stuff
 	flags.StringVar(&pluginOptions.LogFile, "log-file", "", "Logging file for debug output")
