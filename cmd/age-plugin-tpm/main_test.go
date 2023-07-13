@@ -75,7 +75,7 @@ func TestEncryptDecrypt(t *testing.T) {
 
 	})
 
-	t.Run("RunIdentitiyv1", func(t *testing.T) {
+	t.Run("RunIdentitiyV1", func(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
