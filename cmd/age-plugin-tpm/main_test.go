@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"regexp"
 	"testing"
 
 	"github.com/foxboron/age-plugin-tpm/plugin"
@@ -65,15 +66,16 @@ func TestEncryptDecrypt(t *testing.T) {
 		if err := RunRecipientV1(&stdin, &stdout); err != nil {
 			t.Fatalf("Failed RunRecipientV1: %v", err)
 		}
-		// TODO: Better parsing
-		output := strings.TrimSpace(stdout.String())
-		lines := strings.Split(output, "\n")
-		wrappedKey = strings.TrimSpace(lines[1])
-		tag = strings.Split(lines[0], " ")[4]
-		sessionKey = strings.Split(lines[0], " ")[5]
+
+		match := regexp.
+			MustCompile(`(?m)-> recipient-stanza 0 tpm-ecc (.+?) (.+?)\n(.+?)\n-> done`).
+			FindStringSubmatch(stdout.String())
+
+		tag, sessionKey, wrappedKey = match[1], match[2], match[3]
+
 	})
 
-	t.Run("RunIdentitiyv1", func(t *testing.T) {
+	t.Run("RunIdentitiyV1", func(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
@@ -91,10 +93,10 @@ func TestEncryptDecrypt(t *testing.T) {
 			t.Fatalf("Failed RunRecipientV1: %v", err)
 		}
 
-		// TODO: Better parsing
-		output := strings.TrimSpace(stdout.String())
-		output = strings.ReplaceAll(output, "-> file-key 0\n", "")
-		output = strings.ReplaceAll(output, "-> done", "")
+		output := regexp.
+			MustCompile(`(?m)-> file-key 0\n(.+?)\n-> done`).
+			FindStringSubmatch(stdout.String())[1]
+
 		out, err := b64Decode(output)
 		if err != nil {
 			t.Fatalf("b64Decode failed: %v", err)
