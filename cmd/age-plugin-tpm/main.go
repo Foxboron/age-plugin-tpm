@@ -298,10 +298,16 @@ parser:
 
 	for _, recipient := range recipients {
 		var pin []byte
+		var err error
 
 		if recipient.Recipient.PIN == plugin.HasPIN {
 			if s := os.Getenv("AGE_TPM_PIN"); s != "" {
 				pin = []byte(s)
+			} else if s := os.Getenv("AGE_TPM_PINENTRY"); s != "" {
+				pin, err = plugin.GetPinentry()
+				if err != nil {
+					return err
+				}
 			} else {
 				stdout.WriteString("-> request-secret tpm\n")
 				stdout.WriteString(b64Encode([]byte("Please enter the PIN for the key:")) + "\n")
