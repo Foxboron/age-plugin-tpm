@@ -20,6 +20,8 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+      - name: add stefanberger/swtpm-jammy
+        run: sudo add-apt-repository ppa:stefanberger/swtpm-jammy
       - name: Install swtpm
         run: sudo apt-get install -y swtpm-tools
       - name: Run tests

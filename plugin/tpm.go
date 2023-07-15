@@ -7,7 +7,7 @@ import (
 	"path"
 	"syscall"
 
-	"github.com/foxboron/swtpm_test"
+	swtpm_test "github.com/foxboron/swtpm_test"
 	"github.com/google/go-tpm/tpm2/transport"
 )
 
