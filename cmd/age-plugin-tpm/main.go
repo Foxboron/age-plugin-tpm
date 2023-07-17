@@ -344,7 +344,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 	var tpm *plugin.TPMDevice
 	var tpmPath string
 	var err error
-	if pluginOptions.SwTPM || os.Getenv("AGE_PLUGIN_TPM_SWTPM") != "" {
+	if pluginOptions.SwTPM || os.Getenv("AGE_TPM_SWTPM") != "" {
 		tpm, err = plugin.NewSwTPM(swtpmPath)
 	} else {
 		tpm, err = plugin.NewTPM(tpmPath)
