@@ -17,7 +17,7 @@ The identity format and technical details might change between iterations.
 Consider this plugin experimental.
 
 Instead of utilizing the TPM directly, you can use `--swtpm` or `export
-AGE_PLUGIN_TPM_SWTPM=1` to create a identity backed by
+AGE_TPM_SWTPM=1` to create a identity backed by
 [swtpm](https://github.com/stefanberger/swtpm) which will be stored under
 `/var/tmp/age-plugin-tpm`.
 
