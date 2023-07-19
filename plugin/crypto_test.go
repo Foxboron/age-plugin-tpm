@@ -63,6 +63,10 @@ func TestEncryptionDecryption(t *testing.T) {
 				t.Fatalf("failed test: %v", err)
 			}
 
+			if c.shouldfail {
+				t.Fatalf("test should be failing")
+			}
+
 			if !bytes.Equal(c.filekey, unwrappedFileKey) {
 				t.Fatalf("filkeys are not the same")
 			}
