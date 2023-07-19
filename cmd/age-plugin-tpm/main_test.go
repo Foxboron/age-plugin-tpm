@@ -19,7 +19,6 @@ func TestEncryptDecrypt(t *testing.T) {
 
 	var identity *plugin.Identity
 
-	os.Setenv("XDG_CACHE_HOME", t.TempDir())
 	SetLogger()
 
 	tpm, err := plugin.NewSwTPM(t.TempDir())
