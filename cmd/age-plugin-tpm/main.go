@@ -207,17 +207,17 @@ parser:
 	return nil
 }
 
-type Recipient struct {
+type RecipientStanza struct {
 	SessionKey []byte
 	WrappedKey []byte
 	Tag        []byte
-	Recipient  *plugin.Identity
+	Identity   *plugin.Identity
 }
 
 func RunIdentityV1(tpm transport.TPMCloser, stdin io.Reader, stdout io.StringWriter) error {
 	var entry string
 	identities := []string{}
-	recipients := []*Recipient{}
+	recipients := []*RecipientStanza{}
 	scanner := bufio.NewScanner(stdin)
 parser:
 	for scanner.Scan() {
@@ -234,7 +234,7 @@ parser:
 			plugin.Log.Printf("add-identity: %s\n", cmd[1])
 			identities = append(identities, cmd[1])
 		case "recipient-stanza":
-			plugin.Log.Printf("recipieint-stanza: %s\n", cmd)
+			plugin.Log.Printf("recipient-stanza: %s\n", cmd)
 
 			entry := scanner.Text()
 			entry = strings.TrimPrefix(entry, "-> ")
@@ -283,11 +283,11 @@ parser:
 			if err != nil {
 				return err
 			}
-			recipients = append(recipients, &Recipient{
+			recipients = append(recipients, &RecipientStanza{
 				SessionKey: sessionKey,
 				WrappedKey: wrappedKey,
 				Tag:        tag,
-				Recipient:  k,
+				Identity:   k,
 			})
 		case "done":
 			// Consume last new line?
@@ -300,7 +300,7 @@ parser:
 		var pin []byte
 		var err error
 
-		if recipient.Recipient.PIN == plugin.HasPIN {
+		if recipient.Identity.PIN == plugin.HasPIN {
 			if s := os.Getenv("AGE_TPM_PIN"); s != "" {
 				pin = []byte(s)
 			} else if s := os.Getenv("AGE_TPM_PINENTRY"); s != "" {
@@ -327,7 +327,7 @@ parser:
 			}
 		}
 
-		key, err := plugin.DecryptTPM(tpm, recipient.Recipient, recipient.SessionKey, recipient.WrappedKey, recipient.Tag, pin)
+		key, err := plugin.DecryptTPM(tpm, recipient.Identity, recipient.SessionKey, recipient.WrappedKey, recipient.Tag, pin)
 		if errors.Is(err, plugin.ErrWrongTag) {
 			continue
 		} else if err != nil {
