@@ -1,4 +1,0 @@
-package plugin
-
-func StateMachine() {
-}
