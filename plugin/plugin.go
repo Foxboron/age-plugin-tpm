@@ -2,18 +2,10 @@ package plugin
 
 import (
 	"bytes"
-	"crypto/ecdh"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/sha256"
 	"fmt"
-	"io"
-	"math/big"
 
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
-	"golang.org/x/crypto/chacha20poly1305"
-	"golang.org/x/crypto/hkdf"
 )
 
 const (
@@ -55,6 +47,9 @@ func CreateSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, err
 	}, srkPublic, nil
 }
 
+// Creates a new identity. It initializes a new SRK parent in the TPM and
+// returns the identity and the corresponding recipient.
+// Note: It does not load the identity key into the TPM.
 func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *Recipient, error) {
 	srkHandle, srkPublic, err := CreateSRK(tpm)
 	if err != nil {
@@ -157,101 +152,4 @@ func LoadIdentityWithParent(tpm transport.TPMCloser, parent tpm2.AuthHandle, ide
 		Name:   loadBlobRsp.Name,
 		Auth:   tpm2.PasswordAuth(nil),
 	}, nil
-}
-
-func DecryptTPM(tpm transport.TPMCloser, identity *Identity, remoteKey, fileKey, pin []byte) ([]byte, error) {
-	x, y, sessionKey, err := UnmarshalCompressedECDH(remoteKey)
-	if err != nil {
-		return nil, err
-	}
-
-	swPub := tpm2.TPMSECCPoint{
-		X: tpm2.TPM2BECCParameter{Buffer: x.FillBytes(make([]byte, 32))},
-		Y: tpm2.TPM2BECCParameter{Buffer: y.FillBytes(make([]byte, 32))},
-	}
-
-	handle, err := LoadIdentity(tpm, identity)
-	if err != nil {
-		return nil, err
-	}
-	defer FlushHandle(tpm, handle.Handle)
-
-	// Add the AuthSession for the handle
-	handle.Auth = tpm2.PasswordAuth(pin)
-
-	ecdh := tpm2.ECDHZGen{
-		KeyHandle: handle,
-		InPoint:   tpm2.New2B(swPub),
-	}
-
-	srkHandle, srkPublic, err := CreateSRK(tpm)
-	if err != nil {
-		return nil, fmt.Errorf("failed getting srk: %v", err)
-	}
-
-	defer FlushHandle(tpm, srkHandle)
-
-	ecdhRsp, err := ecdh.Execute(tpm,
-		tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
-			tpm2.AESEncryption(128, tpm2.EncryptOut),
-			tpm2.Salted(srkHandle.Handle, *srkPublic)))
-	if err != nil {
-		return nil, fmt.Errorf("failed ecdhzgen: %v", err)
-	}
-
-	sharedSecret, err := ecdhRsp.OutPoint.Contents()
-	if err != nil {
-		return nil, fmt.Errorf("failed getting ecdh point: %v", err)
-	}
-
-	resp, err := identity.Recipient()
-	if err != nil {
-		return nil, err
-	}
-
-	ourKey := resp.Pubkey.Bytes()
-
-	theirKey := sessionKey.Bytes()
-
-	salt := make([]byte, 0, len(theirKey)+len(ourKey))
-	salt = append(salt, theirKey...)
-	salt = append(salt, ourKey...)
-
-	h := hkdf.New(sha256.New, sharedSecret.X.Buffer, salt, []byte(p256Label))
-	wrappingKey := make([]byte, chacha20poly1305.KeySize)
-	if _, err := io.ReadFull(h, wrappingKey); err != nil {
-		return nil, err
-	}
-
-	aead, err := chacha20poly1305.New(wrappingKey)
-	if err != nil {
-		return nil, err
-	}
-	nonce := make([]byte, chacha20poly1305.NonceSize)
-
-	decrypted, err := aead.Open(nil, nonce, fileKey, nil)
-	if err != nil {
-		return nil, err
-	}
-	if err != nil {
-		return []byte{}, err
-	}
-
-	return decrypted, nil
-}
-
-// Unmarshal a compressed ec key
-func UnmarshalCompressedECDH(b []byte) (*big.Int, *big.Int, *ecdh.PublicKey, error) {
-	x, y := elliptic.UnmarshalCompressed(elliptic.P256(), b)
-	ec := ecdsa.PublicKey{
-		Curve: elliptic.P256(), X: x, Y: y,
-	}
-	key, err := ec.ECDH()
-	return x, y, key, err
-}
-
-// Marshal a compressed EC key
-func MarshalCompressedECDH(pk *ecdh.PublicKey) []byte {
-	x, y := elliptic.Unmarshal(elliptic.P256(), pk.Bytes())
-	return elliptic.MarshalCompressed(elliptic.P256(), x, y)
 }

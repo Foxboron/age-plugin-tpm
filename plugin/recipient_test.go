@@ -52,7 +52,7 @@ func TestEncodeRecipient(t *testing.T) {
 	for _, c := range cases {
 		s := EncodeRecipient(c.pubKey)
 		if !strings.EqualFold(s, c.recipient) {
-			t.Fatalf("did not get the recipient back")
+			t.Fatalf("did not get the recipient back. expected %v, got %v", c.recipient, s)
 		}
 	}
 }

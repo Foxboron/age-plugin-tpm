@@ -180,7 +180,7 @@ parser:
 				return err
 			}
 
-			wrapped, sessionKey, err := plugin.WrapFileKey(fileKey, recipient.Pubkey)
+			wrapped, sessionKey, err := plugin.EncryptFileKey(fileKey, recipient.Pubkey)
 			if err != nil {
 				return err
 			}
@@ -336,7 +336,7 @@ parser:
 			continue
 		}
 
-		key, err := plugin.DecryptTPM(tpm, recipient.Identity, recipient.SessionKey, recipient.WrappedKey, pin)
+		key, err := plugin.DecryptFileKeyTPM(tpm, recipient.Identity, recipient.SessionKey, recipient.WrappedKey, pin)
 		if err != nil {
 			return err
 		}

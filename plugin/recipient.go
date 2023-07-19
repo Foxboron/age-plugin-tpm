@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/ecdh"
 	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -13,8 +12,6 @@ import (
 
 	"github.com/foxboron/age-plugin-tpm/internal/bech32"
 	"github.com/google/go-tpm/tpm2"
-	"golang.org/x/crypto/chacha20poly1305"
-	"golang.org/x/crypto/hkdf"
 )
 
 type Recipient struct {
@@ -64,7 +61,7 @@ func NewRecipientFromBytes(s []byte) (*Recipient, error) {
 
 func EncodeRecipient(recipient *Recipient) string {
 	var b bytes.Buffer
-	binary.Write(&b, binary.BigEndian, MarshalCompressedECDH(recipient.Pubkey))
+	binary.Write(&b, binary.BigEndian, MarshalCompressedEC(recipient.Pubkey))
 	recp, _ := bech32.Encode(RecipientPrefix, b.Bytes())
 	return recp
 }
@@ -85,45 +82,10 @@ func DecodeRecipient(s string) (*Recipient, error) {
 		return nil, fmt.Errorf("invalid hrp")
 	}
 
-	_, _, ecdhKey, err := UnmarshalCompressedECDH(b)
+	_, _, ecdhKey, err := UnmarshalCompressedEC(b)
 	if err != nil {
 		return nil, err
 	}
 
 	return NewRecipient(ecdhKey), nil
-}
-
-const p256Label = "age-encryption.org/v1/tpm-p256"
-
-// Wraps the file key in a session key
-// Returns  the sealed filekey, the session pubkey bytes, error
-func WrapFileKey(fileKey []byte, pubkey *ecdh.PublicKey) ([]byte, []byte, error) {
-
-	sessionKey, _ := ecdh.P256().GenerateKey(rand.Reader)
-	sessionPubKey := sessionKey.PublicKey()
-
-	shared, err := sessionKey.ECDH(pubkey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ourKey := sessionPubKey.Bytes()
-	theirKey := pubkey.Bytes()
-
-	salt := make([]byte, 0, len(ourKey)+len(theirKey))
-	salt = append(salt, ourKey...)
-	salt = append(salt, theirKey...)
-
-	h := hkdf.New(sha256.New, shared[:], salt, []byte(p256Label))
-	wrappingKey := make([]byte, chacha20poly1305.KeySize)
-	if _, err := io.ReadFull(h, wrappingKey); err != nil {
-		return nil, nil, err
-	}
-
-	aead, err := chacha20poly1305.New(wrappingKey)
-	if err != nil {
-		return nil, nil, err
-	}
-	nonce := make([]byte, chacha20poly1305.NonceSize)
-	return aead.Seal(nil, nonce, fileKey, nil), MarshalCompressedECDH(sessionPubKey), nil
 }
