@@ -62,8 +62,7 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, string, err
 		return nil, "", fmt.Errorf("failed creating SRK: %v", err)
 	}
 
-	flushSrk := tpm2.FlushContext{FlushHandle: srkHandle}
-	defer flushSrk.Execute(tpm)
+	defer FlushHandle(tpm, srkHandle)
 
 	eccKey := tpm2.Create{
 		ParentHandle: srkHandle,
@@ -129,8 +128,7 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, string, err
 		return nil, "", err
 	}
 
-	flushIdentity := tpm2.FlushContext{FlushHandle: handle.Handle}
-	defer flushIdentity.Execute(tpm)
+	defer FlushHandle(tpm, handle.Handle)
 
 	pubkey, err := GetPubkeyWithHandle(tpm, handle.Handle)
 	if err != nil {
@@ -145,8 +143,8 @@ func LoadIdentity(tpm transport.TPMCloser, identity *Identity) (*tpm2.NamedHandl
 		return nil, err
 	}
 
-	flushSrk := tpm2.FlushContext{FlushHandle: srkHandle}
-	defer flushSrk.Execute(tpm)
+	defer FlushHandle(tpm, srkHandle)
+
 	return LoadIdentityWithParent(tpm, *srkHandle, identity)
 }
 
@@ -172,8 +170,7 @@ func GetPubkey(tpm transport.TPMCloser, identity *Identity) (*ecdh.PublicKey, er
 	if err != nil {
 		return nil, err
 	}
-	flushIdentity := tpm2.FlushContext{FlushHandle: handle.Handle}
-	defer flushIdentity.Execute(tpm)
+	defer FlushHandle(tpm, handle.Handle)
 	return GetPubkeyWithHandle(tpm, handle.Handle)
 }
 
@@ -222,13 +219,7 @@ func DecryptTPM(tpm transport.TPMCloser, identity *Identity, remoteKey, fileKey,
 	if err != nil {
 		return nil, err
 	}
-	flushIdentity := tpm2.FlushContext{FlushHandle: handle.Handle}
-	defer flushIdentity.Execute(tpm)
-
-	pubkey, err := GetPubkeyWithHandle(tpm, handle.Handle)
-	if err != nil {
-		return nil, err
-	}
+	defer FlushHandle(tpm, handle.Handle)
 
 	pubkeyTag := GetTag(pubkey)
 	if !bytes.Equal(pubkeyTag, tag) {
@@ -249,8 +240,7 @@ func DecryptTPM(tpm transport.TPMCloser, identity *Identity, remoteKey, fileKey,
 		return nil, fmt.Errorf("failed getting srk: %v", err)
 	}
 
-	flushSrk := tpm2.FlushContext{FlushHandle: srkHandle}
-	defer flushSrk.Execute(tpm)
+	defer FlushHandle(tpm, srkHandle)
 
 	ecdhRsp, err := ecdh.Execute(tpm,
 		tpm2.HMAC(tpm2.TPMAlgSHA256, 16,

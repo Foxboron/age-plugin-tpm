@@ -84,3 +84,15 @@ func NewTPM(dir string) (*TPMDevice, error) {
 func NewSwTPM(dir string) (*TPMDevice, error) {
 	return NewTPMDevice(dir, true)
 }
+
+// shadow the unexported interface from go-tpm
+type handle interface {
+	HandleValue() uint32
+	KnownName() *tpm2.TPM2BName
+}
+
+// Helper to flush handles
+func FlushHandle(tpm transport.TPM, h handle) {
+	flushSrk := tpm2.FlushContext{FlushHandle: h}
+	flushSrk.Execute(tpm)
+}
