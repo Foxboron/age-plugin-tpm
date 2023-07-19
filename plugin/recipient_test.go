@@ -42,7 +42,7 @@ func TestDecodeRecipient(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed decoding recipient: %v", err)
 		}
-		if !reflect.DeepEqual(pubkey, c.pubKey.Pubkey) {
+		if !reflect.DeepEqual(pubkey, c.pubKey) {
 			t.Fatalf("Did not parse the correct key")
 		}
 	}
