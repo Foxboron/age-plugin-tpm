@@ -51,7 +51,7 @@ func CreateSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, err
 	return &tpm2.AuthHandle{
 		Handle: rsp.ObjectHandle,
 		Name:   rsp.Name,
-		Auth:   tpm2.PasswordAuth([]byte("")),
+		Auth:   tpm2.PasswordAuth(nil),
 	}, srkPublic, nil
 }
 
