@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"strings"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/foxboron/age-plugin-tpm/plugin"
@@ -52,14 +52,14 @@ func TestEncryptDecrypt(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
-		pubkey, err := plugin.GetPubkey(tpm.TPM(), identity)
+		recipient, err := identity.Recipient()
 		if err != nil {
-			t.Fatalf("failed getting public key: %v", err)
+			t.Fatalf("failed getting recipient")
 		}
-		recipient := plugin.EncodeRecipient(pubkey)
+		sRecipient := plugin.EncodeRecipient(recipient)
 
 		stdin.WriteString("-> add-recipient ")
-		stdin.WriteString(recipient + "\n")
+		stdin.WriteString(sRecipient + "\n")
 		stdin.WriteString("-> wrap-file-key\n")
 		stdin.WriteString(b64Encode(fileKey) + "\n")
 		stdin.WriteString("-> done\n")

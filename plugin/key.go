@@ -45,6 +45,10 @@ func (i *Identity) Serialize() []any {
 	}
 }
 
+func (i *Identity) Recipient() (*Recipient, error) {
+	return NewRecipientFromBytes(i.Public.Bytes())
+}
+
 func DecodeIdentity(s string) (*Identity, error) {
 	var key Identity
 	hrp, b, err := bech32.Decode(s)
@@ -101,9 +105,7 @@ func ParseIdentity(f io.Reader) (*Identity, error) {
 func EncodeIdentity(i *Identity) (string, error) {
 	var b bytes.Buffer
 	for _, v := range i.Serialize() {
-		if err := binary.Write(&b, binary.BigEndian, v); err != nil {
-			return "", err
-		}
+		binary.Write(&b, binary.BigEndian, v)
 	}
 
 	var pub []byte
@@ -130,7 +132,7 @@ func Marshal(i *Identity, w io.Writer) {
 	fmt.Fprintf(w, "%s\n", s)
 }
 
-func MarshalIdentity(i *Identity, recipient string, w io.Writer) error {
+func MarshalIdentity(i *Identity, recipient *Recipient, w io.Writer) error {
 	key, err := EncodeIdentity(i)
 	if err != nil {
 		return err

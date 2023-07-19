@@ -22,16 +22,16 @@ func mustECDH(e *ecdsa.PublicKey) *ecdh.PublicKey {
 }
 
 var cases = []struct {
-	pubKey    *ecdh.PublicKey
+	pubKey    *Recipient
 	recipient string
 }{{
-	pubKey: mustECDH(
+	pubKey: NewRecipient(mustECDH(
 		&ecdsa.PublicKey{
 			Curve: elliptic.P256(),
 			X:     bigInt("89354244803538158909979995955747079783816134516555582017998279936143319776423"),
 			Y:     bigInt("44449113766368004535934930895165275911452797542884597880018495457858036318074"),
 		},
-	),
+	)),
 
 	recipient: "age1tpm1qtzcedwcyuemjkynrvucs5wyhue4h528vv7s2z9k8xvr78ky6c72wff0tz2",
 }}
@@ -42,7 +42,7 @@ func TestDecodeRecipient(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed decoding recipient: %v", err)
 		}
-		if !reflect.DeepEqual(pubkey, c.pubKey) {
+		if !reflect.DeepEqual(pubkey, c.pubKey.Pubkey) {
 			t.Fatalf("Did not parse the correct key")
 		}
 	}

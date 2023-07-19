@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -125,11 +124,11 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 		if err != nil {
 			return err
 		}
-		pubkey, err := plugin.GetPubkey(tpm, identity)
+		recipient, err := identity.Recipient()
 		if err != nil {
 			return err
 		}
-		return plugin.MarshalRecipient(pubkey, out)
+		return plugin.MarshalRecipient(recipient, out)
 	default:
 		return cmd.Help()
 	}
@@ -171,7 +170,7 @@ parser:
 
 			// TODO: Support multiple identities
 			identity := recipients[0]
-			pubkey, err := plugin.DecodeRecipient(identity)
+			recipient, err := plugin.DecodeRecipient(identity)
 			if err != nil {
 				return err
 			}
@@ -181,12 +180,12 @@ parser:
 				return err
 			}
 
-			wrapped, sessionKey, err := plugin.WrapFileKey(fileKey, pubkey)
+			wrapped, sessionKey, err := plugin.WrapFileKey(fileKey, recipient.Pubkey)
 			if err != nil {
 				return err
 			}
 
-			stdout.WriteString(fmt.Sprintf("-> recipient-stanza 0 tpm-ecc %s %s\n", b64Encode(plugin.GetTag(pubkey)), b64Encode(sessionKey)))
+			stdout.WriteString(fmt.Sprintf("-> recipient-stanza 0 tpm-ecc %s %s\n", b64Encode(recipient.Tag()), b64Encode(sessionKey)))
 
 			// We can only write 48 bytes pr line
 			// chunk the output before b64 encoding it
@@ -327,10 +326,18 @@ parser:
 			}
 		}
 
-		key, err := plugin.DecryptTPM(tpm, recipient.Identity, recipient.SessionKey, recipient.WrappedKey, recipient.Tag, pin)
-		if errors.Is(err, plugin.ErrWrongTag) {
+		resp, err := recipient.Identity.Recipient()
+		if err != nil {
+			return fmt.Errorf("failed to get recipient for identity: %v", err)
+		}
+
+		// Check if we are dealing with the correct key
+		if !bytes.Equal(recipient.Tag, resp.Tag()) {
 			continue
-		} else if err != nil {
+		}
+
+		key, err := plugin.DecryptTPM(tpm, recipient.Identity, recipient.SessionKey, recipient.WrappedKey, pin)
+		if err != nil {
 			return err
 		}
 		stdout.WriteString("-> file-key 0\n")

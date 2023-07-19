@@ -3,35 +3,79 @@ package plugin
 import (
 	"bytes"
 	"crypto/ecdh"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math/big"
 
 	"github.com/foxboron/age-plugin-tpm/internal/bech32"
+	"github.com/google/go-tpm/tpm2"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
 )
 
-// TODO: This should be extended with a struct
-//       Optionally with a reserved field so we could implement
-//       other key-types in the future
+type Recipient struct {
+	Pubkey *ecdh.PublicKey
+	tag    []byte
+}
 
-func EncodeRecipient(pubkey *ecdh.PublicKey) string {
+// Returns the 4 first bytes of a sha256 sum of the key
+// this is used to to find the correct identity in a stanza
+func (r *Recipient) Tag() []byte {
+	return r.tag
+}
+
+func (r *Recipient) String() string {
+	return EncodeRecipient(r)
+}
+
+func NewRecipient(ecc *ecdh.PublicKey) *Recipient {
+	sum := sha256.Sum256(ecc.Bytes())
+	return &Recipient{
+		Pubkey: ecc,
+		tag:    sum[:4],
+	}
+}
+
+func NewRecipientFromBytes(s []byte) (*Recipient, error) {
+	c := tpm2.BytesAs2B[tpm2.TPMTPublic](s)
+	pub, err := c.Contents()
+	if err != nil {
+		return nil, err
+	}
+	ecc, err := pub.Unique.ECC()
+	if err != nil {
+		return nil, err
+	}
+
+	ecdhKey, err := ecdh.P256().NewPublicKey(elliptic.Marshal(elliptic.P256(),
+		big.NewInt(0).SetBytes(ecc.X.Buffer),
+		big.NewInt(0).SetBytes(ecc.Y.Buffer),
+	))
+	if err != nil {
+		return nil, err
+	}
+
+	return NewRecipient(ecdhKey), nil
+}
+
+func EncodeRecipient(recipient *Recipient) string {
 	var b bytes.Buffer
-	binary.Write(&b, binary.BigEndian, MarshalCompressedECDH(pubkey))
+	binary.Write(&b, binary.BigEndian, MarshalCompressedECDH(recipient.Pubkey))
 	recp, _ := bech32.Encode(RecipientPrefix, b.Bytes())
 	return recp
 }
 
-func MarshalRecipient(pubkey *ecdh.PublicKey, w io.Writer) error {
+func MarshalRecipient(pubkey *Recipient, w io.Writer) error {
 	recipient := EncodeRecipient(pubkey)
 	fmt.Fprintf(w, "%s\n", recipient)
 	return nil
 }
 
-func DecodeRecipient(s string) (*ecdh.PublicKey, error) {
+func DecodeRecipient(s string) (*Recipient, error) {
 	hrp, b, err := bech32.Decode(s)
 	if err != nil {
 		return nil, fmt.Errorf("DecodeRecipinet: failed to decode bech32: %v", err)
@@ -46,12 +90,7 @@ func DecodeRecipient(s string) (*ecdh.PublicKey, error) {
 		return nil, err
 	}
 
-	return ecdhKey, nil
-}
-
-func GetTag(e *ecdh.PublicKey) []byte {
-	sum := sha256.Sum256(e.Bytes())
-	return sum[:4]
+	return NewRecipient(ecdhKey), nil
 }
 
 const p256Label = "age-encryption.org/v1/tpm-p256"
