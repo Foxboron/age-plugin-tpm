@@ -12,10 +12,11 @@ require (
 )
 
 require (
+	github.com/google/go-tpm-tools v0.3.13-0.20230620182252-4639ecce2aba // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/rs/zerolog v1.26.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	go.uber.org/multierr v1.7.0 // indirect
+	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/sys v0.10.0 // indirect
 )
