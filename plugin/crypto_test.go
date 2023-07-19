@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/google/go-tpm/tpm2/transport/simulator"
 )
 
 func TestEncryptionDecryption(t *testing.T) {
-	tpm, err := NewSwTPM(t.TempDir())
+	tpm, err := simulator.OpenSimulator()
 	if err != nil {
 		t.Fatalf("failed opening tpm: %v", err)
 	}
@@ -48,11 +50,11 @@ func TestEncryptionDecryption(t *testing.T) {
 
 	for n, c := range cases {
 		t.Run(fmt.Sprintf("case %d, %s", n, c.msg), func(t *testing.T) {
-			identity, recipient, err1 := CreateIdentity(tpm.TPM(), c.pin)
+			identity, recipient, err1 := CreateIdentity(tpm, c.pin)
 
 			wrappedFileKey, sessionKey, err2 := EncryptFileKey(c.filekey, recipient.Pubkey)
 
-			unwrappedFileKey, err3 := DecryptFileKeyTPM(tpm.TPM(), identity, sessionKey, wrappedFileKey, c.decryptpin)
+			unwrappedFileKey, err3 := DecryptFileKeyTPM(tpm, identity, sessionKey, wrappedFileKey, c.decryptpin)
 
 			err := errors.Join(err1, err2, err3)
 
