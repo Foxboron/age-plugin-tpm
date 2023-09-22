@@ -9,10 +9,7 @@ import (
 )
 
 const (
-	PluginName      = "tpm"
-	BinaryName      = "age-plugin-yubikey"
-	RecipientPrefix = "age1tpm"
-	IdentityPrefix  = "age-plugin-tpm-"
+	PluginName = "tpm"
 )
 
 // Creates a Storage Key, or return the loaded storage key

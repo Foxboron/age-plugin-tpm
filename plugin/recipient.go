@@ -10,7 +10,7 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/foxboron/age-plugin-tpm/internal/bech32"
+	"filippo.io/age/plugin"
 	"github.com/google/go-tpm/tpm2"
 )
 
@@ -62,8 +62,7 @@ func NewRecipientFromBytes(s []byte) (*Recipient, error) {
 func EncodeRecipient(recipient *Recipient) string {
 	var b bytes.Buffer
 	binary.Write(&b, binary.BigEndian, MarshalCompressedEC(recipient.Pubkey))
-	recp, _ := bech32.Encode(RecipientPrefix, b.Bytes())
-	return recp
+	return plugin.EncodeRecipient(PluginName, b.Bytes())
 }
 
 func MarshalRecipient(pubkey *Recipient, w io.Writer) error {
@@ -73,13 +72,12 @@ func MarshalRecipient(pubkey *Recipient, w io.Writer) error {
 }
 
 func DecodeRecipient(s string) (*Recipient, error) {
-	hrp, b, err := bech32.Decode(s)
+	name, b, err := plugin.ParseRecipient(s)
 	if err != nil {
-		return nil, fmt.Errorf("DecodeRecipinet: failed to decode bech32: %v", err)
+		return nil, fmt.Errorf("failed to decode recipient: %v", err)
 	}
-
-	if hrp != RecipientPrefix {
-		return nil, fmt.Errorf("invalid hrp")
+	if name != PluginName {
+		return nil, fmt.Errorf("invalid plugin for type %s", name)
 	}
 
 	_, _, ecdhKey, err := UnmarshalCompressedEC(b)

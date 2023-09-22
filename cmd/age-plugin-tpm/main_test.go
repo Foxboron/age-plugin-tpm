@@ -78,7 +78,7 @@ func TestEncryptDecrypt(t *testing.T) {
 		var stdin bytes.Buffer
 		var stdout strings.Builder
 
-		encoded, err := plugin.EncodeIdentity(identity)
+		encoded := plugin.EncodeIdentity(identity)
 		if err != nil {
 			t.Fatalf("Failed EncodeKey: %v", err)
 		}
