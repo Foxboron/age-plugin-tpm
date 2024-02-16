@@ -347,21 +347,23 @@ parser:
 	return nil
 }
 
-func RunPlugin(cmd *cobra.Command, args []string) error {
+func getTPM() (*plugin.TPMDevice, error) {
+	plugin.Log.Println("Fetching TPM device")
 	var tpm *plugin.TPMDevice
-	var tpmPath string
 	var err error
 	if pluginOptions.SwTPM || os.Getenv("AGE_TPM_SWTPM") != "" {
 		tpm, err = plugin.NewSwTPM(swtpmPath)
 	} else {
-		tpm, err = plugin.NewTPM(tpmPath)
+		tpm, err = plugin.NewTPM("")
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	tpm.Watch()
-	defer tpm.Close()
+	return tpm, nil
+}
+
+func RunPlugin(cmd *cobra.Command, args []string) error {
 
 	switch pluginOptions.AgePlugin {
 	case "recipient-v1":
@@ -372,6 +374,11 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	case "identity-v1":
+		tpm, err := getTPM()
+		if err != nil {
+			return err
+		}
+		defer tpm.Close()
 		plugin.Log.Println("Got identity-v1")
 		if err := RunIdentityV1(tpm.TPM(), os.Stdin, os.Stdout); err != nil {
 			os.Stdout.WriteString("-> error\n")
@@ -379,6 +386,11 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	default:
+		tpm, err := getTPM()
+		if err != nil {
+			return err
+		}
+		defer tpm.Close()
 		in := os.Stdin
 		if inFile := cmd.Flags().Arg(0); inFile != "" && inFile != "-" {
 			f, err := os.Open(inFile)
