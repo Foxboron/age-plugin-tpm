@@ -28,7 +28,7 @@ testing.
 
 The simplest way of installing this plugin is by running the follow go command.
 
-`go install github.com/Foxboron/age-plugin-tpm@latest`
+`go install github.com/foxboron/age-plugin-tpm/cmd/age-plugin-tpm@latest`
 
 Alternatively download the [pre-built binaries](https://github.com/foxboron/age-plugin-tpm/releases).
 
