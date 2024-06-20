@@ -1,15 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"strings"
 
+	"filippo.io/age"
+	page "filippo.io/age/plugin"
 	"github.com/foxboron/age-plugin-tpm/plugin"
 	"github.com/google/go-tpm/tpm2/transport"
 	"github.com/spf13/cobra"
@@ -143,208 +143,76 @@ func b64Encode(s []byte) string {
 	return base64.RawStdEncoding.Strict().EncodeToString(s)
 }
 
-func RunRecipientV1(stdin io.Reader, stdout io.StringWriter) error {
-	// TODO: Reimplement once we have a proper implementation from upstream
-	var entry string
-	var key string
-	recipients := []string{}
-	scanner := bufio.NewScanner(stdin)
-parser:
-	for scanner.Scan() {
-		entry = scanner.Text()
-		if len(entry) == 0 {
-			continue
-		}
-		entry = strings.TrimPrefix(entry, "-> ")
-		cmd := strings.SplitN(entry, " ", 2)
-		plugin.Log.Printf("scanned: '%s'\n", cmd[0])
-		switch cmd[0] {
-		case "add-recipient":
-			// Only one recipient?
-			plugin.Log.Printf("add-recipient: %s\n", cmd[1])
-			recipients = append(recipients, cmd[1])
-		case "wrap-file-key":
-			scanner.Scan()
-			keyB64 := scanner.Text()
-			plugin.Log.Printf("wrap-file-key: %s\n", key)
-
-			// TODO: Support multiple identities
-			identity := recipients[0]
-			recipient, err := plugin.DecodeRecipient(identity)
-			if err != nil {
-				return err
-			}
-
-			fileKey, err := b64Decode(keyB64)
-			if err != nil {
-				return err
-			}
-
-			wrapped, sessionKey, err := plugin.EncryptFileKey(fileKey, recipient.Pubkey)
-			if err != nil {
-				return err
-			}
-
-			stdout.WriteString(fmt.Sprintf("-> recipient-stanza 0 tpm-ecc %s %s\n", b64Encode(recipient.Tag()), b64Encode(sessionKey)))
-
-			// We can only write 48 bytes pr line
-			// chunk the output before b64 encoding it
-			r := bytes.NewBuffer(wrapped)
-			for {
-				if r.Len() == 0 {
-					break
-				}
-				b := r.Next(48)
-				stdout.WriteString(b64Encode(b) + "\n")
-			}
-		case "done":
-			break parser
-		}
-	}
-
-	stdout.WriteString("-> done\n\n")
-	return nil
+type Recipient struct {
+	*plugin.Recipient
 }
 
-type RecipientStanza struct {
-	SessionKey []byte
-	WrappedKey []byte
-	Tag        []byte
-	Identity   *plugin.Identity
+func (r *Recipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
+	wrapped, sessionKey, err := plugin.EncryptFileKey(fileKey, r.Pubkey)
+	if err != nil {
+		return nil, err
+	}
+	return []*age.Stanza{{
+		Type: "tpm-ecc",
+		Args: []string{b64Encode(r.Tag()), b64Encode(sessionKey)},
+		Body: wrapped,
+	}}, nil
 }
 
-func RunIdentityV1(tpm transport.TPMCloser, stdin io.Reader, stdout io.StringWriter) error {
-	var entry string
-	identities := []string{}
-	recipients := []*RecipientStanza{}
-	scanner := bufio.NewScanner(stdin)
-parser:
-	for scanner.Scan() {
-		entry = scanner.Text()
-		plugin.Log.Printf("scanned: '%s'\n", entry)
-		if len(entry) == 0 {
+type Identity struct {
+	*plugin.Identity
+	p   *page.Plugin
+	tpm transport.TPMCloser
+}
+
+func (i *Identity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err error) {
+	for _, stanza := range stanzas {
+		// We only understand "tpm-ecc" stanzas
+		if len(stanza.Args) < 3 || stanza.Args[0] != "tpm-ecc" {
 			continue
 		}
-		entry = strings.TrimPrefix(entry, "-> ")
-		cmd := strings.SplitN(entry, " ", 2)
-		plugin.Log.Printf("scanned: '%s'\n", cmd[0])
-		switch cmd[0] {
-		case "add-identity":
-			plugin.Log.Printf("add-identity: %s\n", cmd[1])
-			identities = append(identities, cmd[1])
-		case "recipient-stanza":
-			plugin.Log.Printf("recipient-stanza: %s\n", cmd)
 
-			entry := scanner.Text()
-			entry = strings.TrimPrefix(entry, "-> ")
-			stanza := strings.Split(entry, " ")
-
-			// The bytes are truncated to 64 pr line
-			WrappedKeyS := ""
-			for scanner.Scan() {
-				entry = scanner.Text()
-				WrappedKeyS += entry
-				if len(entry) < 64 {
-					break
-				}
-			}
-
-			// We need at least 5 elements
-			if len(stanza) > 5 {
-				plugin.Log.Println("wrong number of arguments")
-				continue
-			}
-
-			// We only understand "tpm-ecc" stanzas
-			if stanza[2] != "tpm-ecc" {
-				plugin.Log.Println("not a tpm-ecc key")
-				continue
-			}
-
-			tag, err := b64Decode(stanza[3])
-			if err != nil {
-				return fmt.Errorf("failed base64 decode session key: %v", err)
-			}
-
-			sessionKey, err := b64Decode(stanza[4])
-			if err != nil {
-				return fmt.Errorf("failed base64 decode session key: %v", err)
-			}
-
-			plugin.Log.Printf("read wrapped key: %s", WrappedKeyS)
-			wrappedKey, err := b64Decode(WrappedKeyS)
-			if err != nil {
-				return fmt.Errorf("failed base64 decode wrappedKey: %v", err)
-			}
-
-			identity := identities[0]
-			k, err := plugin.DecodeIdentity(identity)
-			if err != nil {
-				return err
-			}
-			recipients = append(recipients, &RecipientStanza{
-				SessionKey: sessionKey,
-				WrappedKey: wrappedKey,
-				Tag:        tag,
-				Identity:   k,
-			})
-		case "done":
-			// Consume last new line?
-			scanner.Scan()
-			break parser
+		tag, err := b64Decode(stanza.Args[1])
+		if err != nil {
+			return nil, fmt.Errorf("failed base64 decode session key: %v", err)
 		}
-	}
 
-	for _, recipient := range recipients {
+		sessionKey, err := b64Decode(stanza.Args[2])
+		if err != nil {
+			return nil, fmt.Errorf("failed base64 decode session key: %v", err)
+		}
+
+		resp, err := i.Recipient()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get recipient for identity: %v", err)
+		}
+
+		// Check if we are dealing with the correct key
+		if !bytes.Equal(tag, resp.Tag()) {
+			continue
+		}
+
 		var pin []byte
-		var err error
-
-		if recipient.Identity.PIN == plugin.HasPIN {
+		if i.PIN == plugin.HasPIN {
 			if s := os.Getenv("AGE_TPM_PIN"); s != "" {
 				pin = []byte(s)
 			} else if s := os.Getenv("AGE_TPM_PINENTRY"); s != "" {
 				pin, err = plugin.GetPinentry()
 				if err != nil {
-					return err
+					return nil, err
 				}
 			} else {
-				stdout.WriteString("-> request-secret tpm\n")
-				stdout.WriteString(b64Encode([]byte("Please enter the PIN for the key:")) + "\n")
-			loop:
-				for scanner.Scan() {
-					switch scanner.Text() {
-					case "-> ok":
-						scanner.Scan()
-						entry, err := b64Decode(scanner.Text())
-						if err != nil {
-							return err
-						}
-						pin = entry
-						break loop
-					}
+				ps, err := i.p.RequestValue("Please enter the PIN for the key:", true)
+				if err != nil {
+					return nil, err
 				}
+				pin = []byte(ps)
 			}
 		}
 
-		resp, err := recipient.Identity.Recipient()
-		if err != nil {
-			return fmt.Errorf("failed to get recipient for identity: %v", err)
-		}
-
-		// Check if we are dealing with the correct key
-		if !bytes.Equal(recipient.Tag, resp.Tag()) {
-			continue
-		}
-
-		key, err := plugin.DecryptFileKeyTPM(tpm, recipient.Identity, recipient.SessionKey, recipient.WrappedKey, pin)
-		if err != nil {
-			return err
-		}
-		stdout.WriteString("-> file-key 0\n")
-		stdout.WriteString(b64Encode([]byte(key)) + "\n")
+		return plugin.DecryptFileKeyTPM(i.tpm, i.Identity, sessionKey, stanza.Body, pin)
 	}
-	stdout.WriteString("-> done\n\n")
-	return nil
+	return nil, age.ErrIncorrectIdentity
 }
 
 func getTPM() (*plugin.TPMDevice, error) {
@@ -368,10 +236,19 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 	switch pluginOptions.AgePlugin {
 	case "recipient-v1":
 		plugin.Log.Println("Got recipient-v1")
-		if err := RunRecipientV1(os.Stdin, os.Stdout); err != nil {
-			os.Stdout.WriteString("-> error\n")
-			os.Stdout.WriteString(b64Encode([]byte(err.Error())) + "\n")
+		p, err := page.New("tpm")
+		if err != nil {
 			return err
+		}
+		p.HandleRecipient(func(data []byte) (age.Recipient, error) {
+			r, err := plugin.DecodeRecipient(page.EncodeRecipient("tpm", data))
+			if err != nil {
+				return nil, err
+			}
+			return &Recipient{r}, nil
+		})
+		if exitCode := p.RecipientV1(); exitCode != 0 {
+			return fmt.Errorf("age-plugin exited with code %d", exitCode)
 		}
 	case "identity-v1":
 		tpm, err := getTPM()
@@ -380,11 +257,17 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 		}
 		defer tpm.Close()
 		plugin.Log.Println("Got identity-v1")
-		if err := RunIdentityV1(tpm.TPM(), os.Stdin, os.Stdout); err != nil {
-			os.Stdout.WriteString("-> error\n")
-			os.Stdout.WriteString(b64Encode([]byte(err.Error())) + "\n")
+		p, err := page.New("tpm")
+		if err != nil {
 			return err
 		}
+		p.HandleIdentity(func(data []byte) (age.Identity, error) {
+			i, err := plugin.DecodeIdentity(page.EncodeIdentity("tpm", data))
+			if err != nil {
+				return nil, err
+			}
+			return &Identity{i, p, tpm.TPM()}, nil
+		})
 	default:
 		tpm, err := getTPM()
 		if err != nil {
