@@ -40,8 +40,8 @@ $ age-plugin-tpm --generate -o age-identity.txt
 $ age-plugin-tpm -y age-identity.txt > age-recipient.txt
 
 # Encrypt / Decrypt something
-$ echo "Hack The Planet" | age -R ./age-recipient.txt -o test-decrypt.txt
-$ age --decrypt -i ./age-identity.txt -o - test-decrypt.txt
+$ echo 'Hack The Planet' | age -R age-recipient.txt -o test-decrypt.txt
+$ age --decrypt -i age-identity.txt -o - test-decrypt.txt
 Hack The Planet!
 ```
 
@@ -49,12 +49,12 @@ Hack The Planet!
 
 ```bash
 # Create identity
-$ AGE_TPM_PIN=123 age-plugin-tpm --generate --pin -o age-identity.txt
-$ age-plugin-tpm -y age-identity > age-recipient.txt
+$ age-plugin-tpm --generate --pin -o age-identity.txt
+$ age-plugin-tpm -y age-identity.txt > age-recipient.txt
 
 # Encrypt / Decrypt something
-$ echo "Hack The Planet" | age -R ./age-recipient.txt -o test-decrypt.txt
-$ AGE_TPM_PIN=123 age --decrypt -i ./age-identity.txt -o - test-decrypt.txt
+$ echo 'Hack The Planet' | age -R age-recipient.txt -o test-decrypt.txt
+$ age --decrypt -i age-identity.txt -o - test-decrypt.txt
 Hack The Planet!
 ```
 
