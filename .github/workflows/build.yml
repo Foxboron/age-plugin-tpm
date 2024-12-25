@@ -14,9 +14,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - {GOOS: linux, GOARCH: amd64}
-          - {GOOS: linux, GOARCH: arm, GOARM: 6}
-          - {GOOS: linux, GOARCH: arm64}
+          - {PLATFORM: linux-amd64, GOOS: linux, GOARCH: amd64}
+          - {PLATFORM: linux-armv6, GOOS: linux, GOARCH: arm, GOARM: 6}
+          - {PLATFORM: linux-arm64, GOOS: linux, GOARCH: arm64}
     steps:
       - name: Install Go
         uses: actions/setup-go@v2
@@ -43,9 +43,9 @@ jobs:
           GOARCH: ${{ matrix.GOARCH }}
           GOARM: ${{ matrix.GOARM }}
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
-          name: age-plugin-tpm-binaries
+          name: age-plugin-tpm-binaries-${{ matrix.PLATFORM }}
           path: age-plugin-tpm-*
   upload:
     name: Upload release binaries
@@ -56,9 +56,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download workflow artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
-          name: age-plugin-tpm-binaries
+          pattern: age-plugin-tpm-binaries-*
+          merge-multiple: true
       - name: Upload release artifacts
         run: gh release upload "$GITHUB_REF_NAME" age-plugin-tpm-*
         env:
