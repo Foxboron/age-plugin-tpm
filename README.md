@@ -40,21 +40,26 @@ $ age-plugin-tpm --generate -o age-identity.txt
 $ age-plugin-tpm -y age-identity.txt > age-recipient.txt
 
 # Encrypt / Decrypt something
-$ echo "Hack The Planet" | age -R ./age-recipient.txt -o test-decrypt.txt
-$ age --decrypt -i ./age-identity.txt -o - test-decrypt.txt
+$ echo 'Hack The Planet!' | age -R age-recipient.txt -o test-decrypt.txt
+$ age --decrypt -i age-identity.txt -o - test-decrypt.txt
 Hack The Planet!
 ```
 
-### With PIN
+You can add `--pin` when calling `--generate` to require a PIN when encrypting or decrypting.
+
+### When used non-interactively
+
+If you want to use a `--pin` non-interactively, you can use the `AGE_TPM_PIN` environment variable.
+Please be aware that environment variables are not secure, and can be read from `/proc/$PID/environ`.
 
 ```bash
 # Create identity
-$ AGE_TPM_PIN=123 age-plugin-tpm --generate --pin -o age-identity.txt
-$ age-plugin-tpm -y age-identity > age-recipient.txt
+$ AGE_TPM_PIN=1234 age-plugin-tpm --generate --pin -o age-identity.txt
+$ age-plugin-tpm -y age-identity.txt > age-recipient.txt
 
 # Encrypt / Decrypt something
-$ echo "Hack The Planet" | age -R ./age-recipient.txt -o test-decrypt.txt
-$ AGE_TPM_PIN=123 age --decrypt -i ./age-identity.txt -o - test-decrypt.txt
+$ echo 'Hack The Planet!' | age -R age-recipient.txt -o test-decrypt.txt
+$ AGE_TPM_PIN=1234 age --decrypt -i age-identity.txt -o - test-decrypt.txt
 Hack The Planet!
 ```
 
