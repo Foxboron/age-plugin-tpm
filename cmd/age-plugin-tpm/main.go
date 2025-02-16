@@ -224,7 +224,7 @@ func (i *Identity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err error) {
 }
 
 func getTPM() (*plugin.TPMDevice, error) {
-	plugin.Log.Println("Fetching TPM device")
+	// plugin.Log.Println("Fetching TPM device")
 	var tpm *plugin.TPMDevice
 	var err error
 	if pluginOptions.SwTPM || os.Getenv("AGE_TPM_SWTPM") != "" {
