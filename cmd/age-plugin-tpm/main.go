@@ -104,7 +104,7 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 			}
 		}
 		if pluginOptions.OutputFile != "" && pluginOptions.OutputFile != "-" {
-			f, err := os.OpenFile(pluginOptions.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+			f, err := os.OpenFile(pluginOptions.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 			if err != nil {
 				return err
 			}
