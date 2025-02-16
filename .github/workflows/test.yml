@@ -22,8 +22,8 @@ jobs:
           fetch-depth: 0
       - name: add stefanberger/swtpm-jammy
         run: sudo add-apt-repository ppa:stefanberger/swtpm-jammy
-      - name: Install swtpm
-        run: sudo apt-get install -y swtpm-tools
+      - name: Install swtpm and age
+        run: sudo apt-get install -y swtpm-tools age
       - name: Run tests
         run: go test -race ./...
       - name: Run go vet
