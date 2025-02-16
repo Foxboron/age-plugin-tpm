@@ -168,16 +168,16 @@ type Identity struct {
 func (i *Identity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err error) {
 	for _, stanza := range stanzas {
 		// We only understand "tpm-ecc" stanzas
-		if len(stanza.Args) < 3 || stanza.Args[0] != "tpm-ecc" {
+		if len(stanza.Args) < 2 || stanza.Type != "tpm-ecc" {
 			continue
 		}
 
-		tag, err := b64Decode(stanza.Args[1])
+		tag, err := b64Decode(stanza.Args[0])
 		if err != nil {
 			return nil, fmt.Errorf("failed base64 decode session key: %v", err)
 		}
 
-		sessionKey, err := b64Decode(stanza.Args[2])
+		sessionKey, err := b64Decode(stanza.Args[1])
 		if err != nil {
 			return nil, fmt.Errorf("failed base64 decode session key: %v", err)
 		}
