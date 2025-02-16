@@ -43,7 +43,7 @@ jobs:
           GOARCH: ${{ matrix.GOARCH }}
           GOARM: ${{ matrix.GOARM }}
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: age-plugin-tpm-binaries-${{ matrix.PLATFORM }}
           path: age-plugin-tpm-*
