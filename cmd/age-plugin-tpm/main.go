@@ -268,6 +268,9 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			}
 			return &Identity{i, p, tpm.TPM()}, nil
 		})
+		if exitCode := p.IdentityV1(); exitCode != 0 {
+			return fmt.Errorf("age-plugin exited with code %d", exitCode)
+		}
 	default:
 		tpm, err := getTPM()
 		if err != nil {
