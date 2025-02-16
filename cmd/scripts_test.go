@@ -20,7 +20,7 @@ func ScriptsWithPath(t *testing.T, path string) {
 		Deadline: time.Now().Add(5 * time.Second),
 		Setup: func(e *testscript.Env) error {
 			e.Setenv("PATH", tmp+string(filepath.ListSeparator)+e.Getenv("PATH"))
-			e.Vars = append(e.Vars, "AGE_TPM_SWTMP=1")
+			e.Vars = append(e.Vars, "AGE_TPM_SWTPM=1")
 			e.Vars = append(e.Vars, "_AGE_TPM_SIMULATOR=1")
 			return nil
 		},
