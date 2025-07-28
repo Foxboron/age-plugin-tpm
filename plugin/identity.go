@@ -36,6 +36,7 @@ type Identity struct {
 	PIN     PINStatus
 	Private tpm2.TPM2BPrivate
 	Public  tpm2.TPM2BPublic
+	SRKName *tpm2.TPM2BName
 }
 
 func (i *Identity) Serialize() []any {
@@ -69,14 +70,24 @@ func DecodeIdentity(s string) (*Identity, error) {
 	if err != nil {
 		return nil, err
 	}
+	r.Next(len(public.Bytes()) + 2)
 
-	private, err := tpm2.Unmarshal[tpm2.TPM2BPrivate](r.Bytes()[len(public.Bytes())+2:])
+	private, err := tpm2.Unmarshal[tpm2.TPM2BPrivate](r.Bytes())
 	if err != nil {
 		return nil, err
 	}
+	r.Next(len(private.Buffer) + 2)
 
 	key.Public = *public
 	key.Private = *private
+
+	if key.Version > 1 {
+		name, err := tpm2.Unmarshal[tpm2.TPM2BName](r.Bytes())
+		if err != nil {
+			return nil, err
+		}
+		key.SRKName = name
+	}
 
 	return &key, nil
 }
@@ -99,7 +110,7 @@ func ParseIdentity(f io.Reader) (*Identity, error) {
 		}
 		return identity, nil
 	}
-	return nil, fmt.Errorf("no identites found")
+	return nil, fmt.Errorf("no identities found")
 }
 
 func EncodeIdentity(i *Identity) string {
@@ -111,6 +122,9 @@ func EncodeIdentity(i *Identity) string {
 	var pub []byte
 	pub = append(pub, tpm2.Marshal(i.Public)...)
 	pub = append(pub, tpm2.Marshal(i.Private)...)
+	if i.Version > 1 {
+		pub = append(pub, tpm2.Marshal(i.SRKName)...)
+	}
 	b.Write(pub)
 
 	return plugin.EncodeIdentity(PluginName, b.Bytes())

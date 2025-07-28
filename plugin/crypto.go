@@ -103,7 +103,7 @@ func DecryptFileKeyTPM(tpm transport.TPMCloser, identity *Identity, remoteKey, f
 
 	// We'll be using the SRK for the session encryption, and we need it as the
 	// parent for our application key. Make sure it's created and available.
-	srkHandle, srkPublic, err := CreateSRK(tpm)
+	srkHandle, srkPublic, err := AcquireIdentitySRK(tpm, identity)
 	if err != nil {
 		return nil, err
 	}

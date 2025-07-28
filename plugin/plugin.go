@@ -12,8 +12,32 @@ const (
 	PluginName = "tpm"
 )
 
-// Creates a Storage Key, or return the loaded storage key
-func CreateSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
+func getSharedSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
+	const SRK_HANDLE tpm2.TPMIDHObject = 0x81000001
+
+	srk := tpm2.ReadPublic{
+		ObjectHandle: SRK_HANDLE,
+	}
+
+	var rsp *tpm2.ReadPublicResponse
+	rsp, err := srk.Execute(tpm)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to acquire primary key: %v", err)
+	}
+
+	srkPublic, err := rsp.OutPublic.Contents()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed getting srk public content: %v", err)
+	}
+
+	return &tpm2.AuthHandle{
+		Handle: SRK_HANDLE,
+		Name:   rsp.Name,
+		Auth:   tpm2.PasswordAuth(nil),
+	}, srkPublic, nil
+}
+
+func createTransientSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
 	srk := tpm2.CreatePrimary{
 		PrimaryHandle: tpm2.TPMRHOwner,
 		InSensitive: tpm2.TPM2BSensitiveCreate{
@@ -48,9 +72,14 @@ func CreateSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, err
 // returns the identity and the corresponding recipient.
 // Note: It does not load the identity key into the TPM.
 func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *Recipient, error) {
-	srkHandle, srkPublic, err := CreateSRK(tpm)
+	srkHandle, srkPublic, err := getSharedSRK(tpm)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed creating SRK: %v", err)
+		Log.Printf("failed to acquire shared SRK, falling back to creating transient SRK: %v\n", err)
+
+		srkHandle, srkPublic, err = createTransientSRK(tpm)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create transient SRK (and no shared SRK could be acquired): %v", err)
+		}
 	}
 
 	defer FlushHandle(tpm, srkHandle)
@@ -108,10 +137,11 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *Recipient,
 	}
 
 	identity := &Identity{
-		Version: 1,
+		Version: 2,
 		PIN:     pinstatus,
 		Private: eccRsp.OutPrivate,
 		Public:  eccRsp.OutPublic,
+		SRKName: &srkHandle.Name,
 	}
 
 	recipient, err := identity.Recipient()
@@ -122,7 +152,7 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *Recipient,
 }
 
 func LoadIdentity(tpm transport.TPMCloser, identity *Identity) (*tpm2.AuthHandle, error) {
-	srkHandle, _, err := CreateSRK(tpm)
+	srkHandle, _, err := AcquireIdentitySRK(tpm, identity)
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +160,29 @@ func LoadIdentity(tpm transport.TPMCloser, identity *Identity) (*tpm2.AuthHandle
 	defer FlushHandle(tpm, srkHandle)
 
 	return LoadIdentityWithParent(tpm, *srkHandle, identity)
+}
+
+func AcquireIdentitySRK(tpm transport.TPMCloser, identity *Identity) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
+	// Try to use the shared persistent SRK for newer identities
+	if identity.Version > 1 {
+		srkHandle, srkPublic, err := getSharedSRK(tpm)
+		if err == nil && bytes.Equal(srkHandle.Name.Buffer, identity.SRKName.Buffer) {
+			return srkHandle, srkPublic, nil
+		}
+	}
+
+	// Otherwise fall back to trying to create a transient SRK
+	srkHandle, srkPublic, err := createTransientSRK(tpm)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create transient SRK while trying to acquire identity SRK: %v\n", err)
+	}
+
+	// We didn't store the SRK name for identity version 1, so just assume that this SRK is the right one
+	if identity.Version == 1 || bytes.Equal(srkHandle.Name.Buffer, identity.SRKName.Buffer) {
+		return srkHandle, srkPublic, nil
+	}
+
+	return nil, nil, fmt.Errorf("unable to acquire SRK matching name specified by identity")
 }
 
 func LoadIdentityWithParent(tpm transport.TPMCloser, parent tpm2.AuthHandle, identity *Identity) (*tpm2.AuthHandle, error) {
