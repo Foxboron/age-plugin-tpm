@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/google/go-tpm/tpm2/transport/simulator"
@@ -15,6 +16,8 @@ func TestEncryptionDecryption(t *testing.T) {
 		t.Fatalf("failed opening tpm: %v", err)
 	}
 	defer tpm.Close()
+
+	SetLogger(io.Discard)
 
 	cases := []struct {
 		msg        string
