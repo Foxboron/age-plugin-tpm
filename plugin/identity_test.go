@@ -17,6 +17,12 @@ func mustPrivate(data []byte) tpm2.TPM2BPrivate {
 	}
 }
 
+func mustSRK(data []byte) *tpm2.TPM2BName {
+	return &tpm2.TPM2BName{
+		Buffer: data,
+	}
+}
+
 var data = []struct {
 	key string
 	t   *Identity
@@ -36,6 +42,25 @@ var data = []struct {
 			PIN:     HasPIN,
 			Public:  mustPublic([]byte("public")),
 			Private: mustPrivate([]byte("private")),
+		},
+	},
+	{
+		key: "AGE-PLUGIN-TPM-1QGQQQPNSW43XC6TRQQRHQUNFWESHGEGQQDEHY6CUT4TFU",
+		t: &Identity{
+			Version: 2,
+			Public:  mustPublic([]byte("public")),
+			Private: mustPrivate([]byte("private")),
+			SRKName: mustSRK([]byte("srk")),
+		},
+	},
+	{
+		key: "AGE-PLUGIN-TPM-1QGQSQPNSW43XC6TRQQRHQUNFWESHGEGQQDEHY6CHRM9KS",
+		t: &Identity{
+			Version: 2,
+			PIN:     HasPIN,
+			Public:  mustPublic([]byte("public")),
+			Private: mustPrivate([]byte("private")),
+			SRKName: mustSRK([]byte("srk")),
 		},
 	},
 }
