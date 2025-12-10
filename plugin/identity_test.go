@@ -1,10 +1,13 @@
 package plugin
 
 import (
+	"errors"
+	"io"
 	"reflect"
 	"testing"
 
 	"github.com/google/go-tpm/tpm2"
+	"github.com/google/go-tpm/tpm2/transport/simulator"
 )
 
 func mustPublic(data []byte) tpm2.TPM2BPublic {
@@ -67,21 +70,45 @@ var data = []struct {
 
 func TestIdentityIdentityGeneration(t *testing.T) {
 	for _, d := range data {
-		k := EncodeIdentity(d.t)
+		k := d.t.String()
 		if !reflect.DeepEqual(k, d.key) {
 			t.Fatalf("no the same. Got %v expected %v", k, d.key)
 		}
 	}
 }
 
-func TestIdentityDecode(t *testing.T) {
-	for _, d := range data {
-		k, err := DecodeIdentity(d.key)
-		if err != nil {
-			t.Fatalf("failed to decode key: %v", err)
-		}
-		if !reflect.DeepEqual(k, d.t) {
-			t.Fatalf("no the same")
-		}
+// func TestIdentityDecode(t *testing.T) {
+// 	for _, d := range data {
+// 		k, err := DecodeIdentity(d.key)
+// 		if err != nil {
+// 			t.Fatalf("failed to decode key: %v", err)
+// 		}
+// 		if !reflect.DeepEqual(k, d.t) {
+// 			t.Fatalf("no the same")
+// 		}
+// 	}
+// }
+
+func TestIdentityCreateEncodeDecode(t *testing.T) {
+	tpm, err := simulator.OpenSimulator()
+	if err != nil {
+		t.Fatalf("failed opening tpm: %v", err)
+	}
+	defer tpm.Close()
+
+	SetLogger(io.Discard)
+	identity, _, err1 := CreateIdentity(tpm, nil)
+	identity.Callbacks(nil, tpm, func() ([]byte, error) { return nil, nil })
+
+	k := identity.String()
+
+	identity2, err2 := DecodeIdentity(k)
+
+	if err = errors.Join(err1, err2); err != nil {
+		t.Fatalf("failed test: %v", err)
+	}
+
+	if identity2.String() != k {
+		t.Fatalf("failed to parse identityes")
 	}
 }

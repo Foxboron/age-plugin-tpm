@@ -11,7 +11,7 @@ import (
 
 func ScriptsWithPath(t *testing.T, path string) {
 	tmp := t.TempDir()
-	c := exec.Command("go", "build", "-buildmode=pie", "-o", tmp, "../cmd/...")
+	c := exec.Command("go", "build", "-buildmode=pie", "-o", tmp, "./...")
 	out, err := c.CombinedOutput()
 	if err != nil {
 		t.Fatal(string(out))
@@ -22,6 +22,7 @@ func ScriptsWithPath(t *testing.T, path string) {
 			e.Setenv("PATH", tmp+string(filepath.ListSeparator)+e.Getenv("PATH"))
 			e.Vars = append(e.Vars, "AGE_TPM_SWTPM=1")
 			e.Vars = append(e.Vars, "_AGE_TPM_SIMULATOR=1")
+			// e.Vars = append(e.Vars, "AGEDEBUG=plugin")
 			return nil
 		},
 		Dir: path,

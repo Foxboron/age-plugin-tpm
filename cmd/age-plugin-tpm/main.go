@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -10,6 +9,7 @@ import (
 
 	"filippo.io/age"
 	page "filippo.io/age/plugin"
+	"filippo.io/age/tag"
 	"github.com/foxboron/age-plugin-tpm/plugin"
 	"github.com/google/go-tpm/tpm2/transport"
 	"github.com/spf13/cobra"
@@ -143,86 +143,6 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 	return nil
 }
 
-func b64Decode(s string) ([]byte, error) {
-	return base64.RawStdEncoding.Strict().DecodeString(s)
-}
-
-func b64Encode(s []byte) string {
-	return base64.RawStdEncoding.Strict().EncodeToString(s)
-}
-
-type Recipient struct {
-	*plugin.Recipient
-}
-
-func (r *Recipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
-	wrapped, sessionKey, err := plugin.EncryptFileKey(fileKey, r.Pubkey)
-	if err != nil {
-		return nil, err
-	}
-	return []*age.Stanza{{
-		Type: "tpm-ecc",
-		Args: []string{b64Encode(r.Tag()), b64Encode(sessionKey)},
-		Body: wrapped,
-	}}, nil
-}
-
-type Identity struct {
-	*plugin.Identity
-	p   *page.Plugin
-	tpm transport.TPMCloser
-}
-
-func (i *Identity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err error) {
-	for _, stanza := range stanzas {
-		// We only understand "tpm-ecc" stanzas
-		if len(stanza.Args) < 2 || stanza.Type != "tpm-ecc" {
-			continue
-		}
-
-		tag, err := b64Decode(stanza.Args[0])
-		if err != nil {
-			return nil, fmt.Errorf("failed base64 decode session key: %v", err)
-		}
-
-		sessionKey, err := b64Decode(stanza.Args[1])
-		if err != nil {
-			return nil, fmt.Errorf("failed base64 decode session key: %v", err)
-		}
-
-		resp, err := i.Recipient()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get recipient for identity: %v", err)
-		}
-
-		// Check if we are dealing with the correct key
-		if !bytes.Equal(tag, resp.Tag()) {
-			continue
-		}
-
-		var pin []byte
-		if i.PIN == plugin.HasPIN {
-			if s := os.Getenv("AGE_TPM_PIN"); s != "" {
-				pin = []byte(s)
-			} else if s := os.Getenv("AGE_TPM_PINENTRY"); s != "" {
-				pin, err = plugin.GetPinentry()
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				ps, err := i.p.RequestValue("Please enter the PIN for the key:", true)
-				if err != nil {
-					return nil, err
-				}
-				pin = []byte(ps)
-			}
-		}
-
-		return plugin.DecryptFileKeyTPM(i.tpm, i.Identity, sessionKey, stanza.Body, pin)
-	}
-	return nil, age.ErrIncorrectIdentity
-}
-
 func getTPM() (*plugin.TPMDevice, error) {
 	// plugin.Log.Println("Fetching TPM device")
 	var tpm *plugin.TPMDevice
@@ -240,7 +160,6 @@ func getTPM() (*plugin.TPMDevice, error) {
 }
 
 func RunPlugin(cmd *cobra.Command, args []string) error {
-
 	switch pluginOptions.AgePlugin {
 	case "recipient-v1":
 		plugin.Log.Println("Got recipient-v1")
@@ -249,11 +168,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		p.HandleRecipient(func(data []byte) (age.Recipient, error) {
-			r, err := plugin.DecodeRecipient(page.EncodeRecipient("tpm", data))
-			if err != nil {
-				return nil, err
-			}
-			return &Recipient{r}, nil
+			return tag.NewClassicRecipient(data)
 		})
 		if exitCode := p.RecipientV1(); exitCode != 0 {
 			return fmt.Errorf("age-plugin exited with code %d", exitCode)
@@ -274,11 +189,30 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return nil, err
 			}
-			return &Identity{i, p, tpm.TPM()}, nil
+			// Set callbacks for TPM and PIN access
+			i.Callbacks(p, tpm.TPM(),
+				func() ([]byte, error) {
+					var pin []byte
+					if s := os.Getenv("AGE_TPM_PIN"); s != "" {
+						pin = []byte(s)
+					} else if s := os.Getenv("AGE_TPM_PINENTRY"); s != "" {
+						pin, err = plugin.GetPinentry()
+						if err != nil {
+							return nil, err
+						}
+					} else {
+						ps, err := p.RequestValue("Please enter the PIN for the key:", true)
+						if err != nil {
+							return nil, err
+						}
+						pin = []byte(ps)
+					}
+					return pin, nil
+				},
+			)
+			return i, nil
 		})
-		if exitCode := p.IdentityV1(); exitCode != 0 {
-			return fmt.Errorf("age-plugin exited with code %d", exitCode)
-		}
+		os.Exit(p.Main())
 	default:
 		tpm, err := getTPM()
 		if err != nil {

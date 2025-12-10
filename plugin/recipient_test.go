@@ -22,10 +22,10 @@ func mustECDH(e *ecdsa.PublicKey) *ecdh.PublicKey {
 }
 
 var cases = []struct {
-	pubKey    *Recipient
+	pubKey    *TPMRecipient
 	recipient string
 }{{
-	pubKey: NewRecipient(mustECDH(
+	pubKey: NewTPMRecipient(mustECDH(
 		&ecdsa.PublicKey{
 			Curve: elliptic.P256(),
 			X:     bigInt("89354244803538158909979995955747079783816134516555582017998279936143319776423"),
@@ -38,7 +38,7 @@ var cases = []struct {
 
 func TestDecodeRecipient(t *testing.T) {
 	for _, c := range cases {
-		pubkey, err := DecodeRecipient(c.recipient)
+		pubkey, err := ParseTPMRecipient(c.recipient)
 		if err != nil {
 			t.Fatalf("failed decoding recipient: %v", err)
 		}
@@ -50,8 +50,7 @@ func TestDecodeRecipient(t *testing.T) {
 
 func TestEncodeRecipient(t *testing.T) {
 	for _, c := range cases {
-		s := EncodeRecipient(c.pubKey)
-		if !strings.EqualFold(s, c.recipient) {
+		if !strings.EqualFold(c.pubKey.String(), c.recipient) {
 			t.Fatalf("did not get the recipient back. expected %v, got %v", c.recipient, s)
 		}
 	}

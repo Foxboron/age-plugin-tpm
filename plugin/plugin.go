@@ -2,8 +2,13 @@ package plugin
 
 import (
 	"bytes"
+	"crypto/ecdh"
+	"crypto/elliptic"
+	"encoding/base64"
 	"fmt"
+	"math/big"
 
+	"filippo.io/age/tag"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
 )
@@ -71,7 +76,7 @@ func createTransientSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPu
 // Creates a new identity. It initializes a new SRK parent in the TPM and
 // returns the identity and the corresponding recipient.
 // Note: It does not load the identity key into the TPM.
-func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *Recipient, error) {
+func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *tag.Recipient, error) {
 	srkHandle, srkPublic, err := getSharedSRK(tpm)
 	if err != nil {
 		Log.Printf("failed to acquire shared SRK, falling back to creating transient SRK: %v\n", err)
@@ -136,12 +141,33 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *Recipient,
 		return nil, nil, fmt.Errorf("failed creating TPM key: %v", err)
 	}
 
+	// Parse out the public key early
+	c := tpm2.BytesAs2B[tpm2.TPMTPublic](eccRsp.OutPublic.Bytes())
+	pub, err := c.Contents()
+	if err != nil {
+		return nil, nil, err
+	}
+	ecc, err := pub.Unique.ECC()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// TODO: We need to fix this part at some point
+	ecdhKey, err := ecdh.P256().NewPublicKey(elliptic.Marshal(elliptic.P256(),
+		big.NewInt(0).SetBytes(ecc.X.Buffer),
+		big.NewInt(0).SetBytes(ecc.Y.Buffer),
+	))
+	if err != nil {
+		return nil, nil, err
+	}
+
 	identity := &Identity{
-		Version: 2,
-		PIN:     pinstatus,
-		Private: eccRsp.OutPrivate,
-		Public:  eccRsp.OutPublic,
-		SRKName: &srkHandle.Name,
+		Version:   2,
+		PIN:       pinstatus,
+		Private:   eccRsp.OutPrivate,
+		Public:    eccRsp.OutPublic,
+		SRKName:   &srkHandle.Name,
+		publickey: ecdhKey,
 	}
 
 	recipient, err := identity.Recipient()
@@ -202,4 +228,12 @@ func LoadIdentityWithParent(tpm transport.TPMCloser, parent tpm2.AuthHandle, ide
 		Name:   loadBlobRsp.Name,
 		Auth:   tpm2.PasswordAuth(nil),
 	}, nil
+}
+
+func b64Decode(s string) ([]byte, error) {
+	return base64.RawStdEncoding.Strict().DecodeString(s)
+}
+
+func b64Encode(s []byte) string {
+	return base64.RawStdEncoding.Strict().EncodeToString(s)
 }
