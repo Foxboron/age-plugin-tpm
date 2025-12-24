@@ -17,6 +17,12 @@ type TPMKeyExchange struct {
 
 var _ ecdh.KeyExchanger = &TPMKeyExchange{}
 
+func NewTPMKeyExchange(tpm transport.TPMCloser, pin []byte, i *Identity) *TPMKeyExchange {
+	return &TPMKeyExchange{
+		tpm, i, pin,
+	}
+}
+
 func (t *TPMKeyExchange) PublicKey() *ecdh.PublicKey {
 	return t.i.Publickey()
 }
@@ -81,10 +87,4 @@ func (t *TPMKeyExchange) ECDH(remoteKey *ecdh.PublicKey) ([]byte, error) {
 	}
 
 	return shared.X.Buffer, nil
-}
-
-func NewTPMKeyExchange(tpm transport.TPMCloser, pin []byte, i *Identity) *TPMKeyExchange {
-	return &TPMKeyExchange{
-		tpm, i, pin,
-	}
 }

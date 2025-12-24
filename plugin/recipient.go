@@ -30,8 +30,6 @@ type TPMRecipient struct {
 	tag    []byte
 }
 
-// Returns the 4 first bytes of a sha256 sum of the key
-// this is used to to find the correct identity in a stanza
 func (r *TPMRecipient) Tag() []byte {
 	return r.tag
 }

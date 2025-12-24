@@ -182,7 +182,7 @@ func AcquireIdentitySRK(tpm transport.TPMCloser, identity *Identity) (*tpm2.Auth
 	// Otherwise fall back to trying to create a transient SRK
 	srkHandle, srkPublic, err := createTransientSRK(tpm)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create transient SRK while trying to acquire identity SRK: %v\n", err)
+		return nil, nil, fmt.Errorf("failed to create transient SRK while trying to acquire identity SRK: %v", err)
 	}
 
 	// We didn't store the SRK name for identity version 1, so just assume that this SRK is the right one

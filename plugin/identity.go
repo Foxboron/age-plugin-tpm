@@ -198,14 +198,10 @@ var marshalTemplate = `
 # Created: %s
 `
 
-func Marshal(i *Identity, w io.Writer) {
+func MarshalIdentity(i *Identity, recipient fmt.Stringer, w io.Writer) error {
 	s := fmt.Sprintf(marshalTemplate, time.Now())
 	s = strings.TrimSpace(s)
 	fmt.Fprintf(w, "%s\n", s)
-}
-
-func MarshalIdentity(i *Identity, recipient *tag.Recipient, w io.Writer) error {
-	Marshal(i, w)
 	fmt.Fprintf(w, "# Recipient: %s\n", recipient.String())
 	fmt.Fprintf(w, "\n%s\n", i.String())
 	return nil
