@@ -56,7 +56,7 @@ func (i *Identity) checktpm() bool {
 	// We need to check if we have passed a hw device
 	// TODO: Figure out a better relationship between identities
 	// identity -> TPM enabled identity -> ( TPMTagIdentity || TPMIdentity )
-	return i.tpm == nil || i.p == nil
+	return i.tpm == nil
 }
 
 func (i *Identity) Callbacks(plugin *plugin.Plugin, tpm transport.TPMCloser, pin func() ([]byte, error)) {
@@ -75,8 +75,10 @@ func (i *Identity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err error) {
 		case "p256tag":
 			resp = NewTPMTagIdentity(i.tpm, i.pin, i)
 		case "tpm-ecc":
-			if err := i.p.DisplayMessage("detected old key type. Please migrate to the new p256tag key type"); err != nil {
-				return nil, fmt.Errorf("failed displaying message: %v", err)
+			if i.p != nil {
+				if err := i.p.DisplayMessage("detected old key type. Please migrate to the new p256tag key type"); err != nil {
+					return nil, fmt.Errorf("failed displaying message: %v", err)
+				}
 			}
 			resp = NewTPMIdentity(i.tpm, i.pin, i)
 		default:
