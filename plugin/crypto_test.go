@@ -54,13 +54,14 @@ func TestEncryptionDecryption(t *testing.T) {
 
 	for n, c := range cases {
 		t.Run(fmt.Sprintf("case %d, %s", n, c.msg), func(t *testing.T) {
-			identity, recipient, err1 := CreateIdentity(tpm, c.pin)
+			identity, _, err1 := CreateIdentity(tpm, c.pin)
 			identity.Callbacks(&plugin.Plugin{}, tpm, func() ([]byte, error) { return c.decryptpin, nil })
+			recipient := identity.TPMRecipient()
 
-			stanzas, err1 := recipient.Wrap(c.filekey)
-			unwrappedFileKey, err2 := identity.Unwrap(stanzas)
+			stanzas, err2 := recipient.Wrap(c.filekey)
+			unwrappedFileKey, err3 := identity.Unwrap(stanzas)
 
-			err := errors.Join(err1, err2)
+			err := errors.Join(err1, err2, err3)
 			if err != nil {
 				if c.shouldfail {
 					return
