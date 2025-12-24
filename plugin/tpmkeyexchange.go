@@ -1,10 +1,10 @@
 package plugin
 
 import (
-	"crypto/elliptic"
 	"fmt"
 
 	"filippo.io/hpke/crypto/ecdh"
+	"filippo.io/nistec"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
 )
@@ -27,9 +27,6 @@ func (t *TPMKeyExchange) Curve() ecdh.Curve {
 }
 
 func (t *TPMKeyExchange) ECDH(remoteKey *ecdh.PublicKey) ([]byte, error) {
-	// TODO: We need to figure out how to get X/Y
-	x, y := elliptic.Unmarshal(elliptic.P256(), remoteKey.Bytes())
-
 	// We'll be using the SRK for the session encryption, and we need it as the
 	// parent for our application key. Make sure it's created and available.
 	srkHandle, srkPublic, err := AcquireIdentitySRK(t.tpm, t.i)
@@ -48,13 +45,21 @@ func (t *TPMKeyExchange) ECDH(remoteKey *ecdh.PublicKey) ([]byte, error) {
 	// Add the AuthSession for the handle
 	handle.Auth = tpm2.PasswordAuth(t.pin)
 
+	p, err := nistec.NewP256Point().SetBytes(remoteKey.Bytes())
+	if err != nil {
+		return nil, err
+	}
+
+	// Get X/Y points from sessionkey
+	x, y := xyECC(p.Bytes())
+
 	// ECDHZGen command for the TPM, turns the sesion key into something we understand.
 	ecdh := tpm2.ECDHZGen{
 		KeyHandle: *handle,
 		InPoint: tpm2.New2B(
 			tpm2.TPMSECCPoint{
-				X: tpm2.TPM2BECCParameter{Buffer: x.FillBytes(make([]byte, 32))},
-				Y: tpm2.TPM2BECCParameter{Buffer: y.FillBytes(make([]byte, 32))},
+				X: tpm2.TPM2BECCParameter{Buffer: x},
+				Y: tpm2.TPM2BECCParameter{Buffer: y},
 			},
 		),
 	}

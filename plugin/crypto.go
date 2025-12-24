@@ -10,6 +10,7 @@ import (
 	"io"
 	"math/big"
 
+	"filippo.io/nistec"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
 )
@@ -100,6 +101,16 @@ func UnmarshalCompressedEC(b []byte) (*big.Int, *big.Int, *ecdh.PublicKey, error
 
 // Marshal a compressed EC key
 func MarshalCompressedEC(pk *ecdh.PublicKey) []byte {
-	x, y := elliptic.Unmarshal(elliptic.P256(), pk.Bytes())
-	return elliptic.MarshalCompressed(elliptic.P256(), x, y)
+	point, err := nistec.NewP256Point().SetBytes(pk.Bytes())
+	if err != nil {
+		panic("invalid compressed ec point")
+	}
+	return point.BytesCompressed()
+}
+
+func xyECC(p []byte) ([]byte, []byte) {
+	if p[0] != 4 {
+		panic("p256 key is not a p256 key")
+	}
+	return p[1 : 32+1], p[1+32:]
 }

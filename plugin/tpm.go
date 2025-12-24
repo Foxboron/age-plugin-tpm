@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"crypto/ecdh"
 	"errors"
 	"io"
 	"os"
@@ -140,4 +141,23 @@ type handle interface {
 func FlushHandle(tpm transport.TPM, h handle) {
 	flushSrk := tpm2.FlushContext{FlushHandle: h}
 	flushSrk.Execute(tpm)
+}
+
+func PublicToECDH(b tpm2.TPM2BPublic) (*ecdh.PublicKey, error) {
+	pub, err := b.Contents()
+	if err != nil {
+		return nil, err
+	}
+
+	parameters, err := pub.Parameters.ECCDetail()
+	if err != nil {
+		return nil, err
+	}
+
+	eccdeets, err := pub.Unique.ECC()
+	if err != nil {
+		return nil, err
+	}
+
+	return tpm2.ECDHPub(parameters, eccdeets)
 }

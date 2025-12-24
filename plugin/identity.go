@@ -4,11 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/ecdh"
-	"crypto/elliptic"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/big"
 	"strings"
 	"time"
 
@@ -157,20 +155,7 @@ func DecodeIdentity(s string) (*Identity, error) {
 	key.Private = *private
 
 	// Parse out the public key early
-	pub, err := public.Contents()
-	if err != nil {
-		return nil, err
-	}
-	ecc, err := pub.Unique.ECC()
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: We need to fix this part at some point
-	ecdhKey, err := ecdh.P256().NewPublicKey(elliptic.Marshal(elliptic.P256(),
-		big.NewInt(0).SetBytes(ecc.X.Buffer),
-		big.NewInt(0).SetBytes(ecc.Y.Buffer),
-	))
+	ecdhKey, err := PublicToECDH(*public)
 	if err != nil {
 		return nil, err
 	}

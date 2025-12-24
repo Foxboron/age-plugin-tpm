@@ -2,11 +2,9 @@ package plugin
 
 import (
 	"crypto/ecdh"
-	"crypto/elliptic"
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"math/big"
 
 	"filippo.io/age"
 	"filippo.io/age/plugin"
@@ -16,25 +14,10 @@ import (
 )
 
 func NewTagRecipientFromBytes(s []byte) (*tag.Recipient, error) {
-	c := tpm2.BytesAs2B[tpm2.TPMTPublic](s)
-	pub, err := c.Contents()
+	ecdhKey, err := PublicToECDH(tpm2.BytesAs2B[tpm2.TPMTPublic](s))
 	if err != nil {
 		return nil, err
 	}
-	ecc, err := pub.Unique.ECC()
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: We need to fix this part at some point
-	ecdhKey, err := ecdh.P256().NewPublicKey(elliptic.Marshal(elliptic.P256(),
-		big.NewInt(0).SetBytes(ecc.X.Buffer),
-		big.NewInt(0).SetBytes(ecc.Y.Buffer),
-	))
-	if err != nil {
-		return nil, err
-	}
-
 	return NewTagRecipient(ecdhKey)
 }
 
@@ -93,11 +76,15 @@ func ParseTPMRecipient(s string) (*TPMRecipient, error) {
 	if name != PluginName {
 		return nil, fmt.Errorf("invalid plugin for type %s", name)
 	}
-	_, _, p, err := UnmarshalCompressedEC(b)
+	p, err := nistec.NewP256Point().SetBytes(b)
 	if err != nil {
 		return nil, err
 	}
-	return NewTPMRecipient(p), nil
+	pubkey, err := ecdh.P256().NewPublicKey(p.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	return NewTPMRecipient(pubkey), nil
 }
 
 func MarshalRecipient(recipient *tag.Recipient, w io.Writer) error {

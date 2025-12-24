@@ -2,11 +2,8 @@ package plugin
 
 import (
 	"bytes"
-	"crypto/ecdh"
-	"crypto/elliptic"
 	"encoding/base64"
 	"fmt"
-	"math/big"
 
 	"filippo.io/age/tag"
 	"github.com/google/go-tpm/tpm2"
@@ -141,22 +138,7 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *tag.Recipi
 		return nil, nil, fmt.Errorf("failed creating TPM key: %v", err)
 	}
 
-	// Parse out the public key early
-	c := tpm2.BytesAs2B[tpm2.TPMTPublic](eccRsp.OutPublic.Bytes())
-	pub, err := c.Contents()
-	if err != nil {
-		return nil, nil, err
-	}
-	ecc, err := pub.Unique.ECC()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// TODO: We need to fix this part at some point
-	ecdhKey, err := ecdh.P256().NewPublicKey(elliptic.Marshal(elliptic.P256(),
-		big.NewInt(0).SetBytes(ecc.X.Buffer),
-		big.NewInt(0).SetBytes(ecc.Y.Buffer),
-	))
+	ecdhKey, err := PublicToECDH(eccRsp.OutPublic)
 	if err != nil {
 		return nil, nil, err
 	}
