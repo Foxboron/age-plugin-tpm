@@ -13,6 +13,7 @@ import (
 	sim "github.com/google/go-tpm-tools/simulator"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
+	"github.com/google/go-tpm/tpm2/transport/linuxtpm"
 	"github.com/google/go-tpm/tpmutil"
 )
 
@@ -104,9 +105,9 @@ func NewTPMDevice(tpmPath string, isSwtpm bool) (*TPMDevice, error) {
 
 	// If we don't pass a path to OpenTPM then we have the tpmrm0 and tpm0 fallbacks
 	if tpmPath != "" {
-		tpm, err = transport.OpenTPM(tpmPath)
+		tpm, err = linuxtpm.Open(tpmPath)
 	} else {
-		tpm, err = transport.OpenTPM()
+		tpm, err = linuxtpm.Open("/dev/tpmrm0")
 	}
 	if err != nil {
 		return nil, err

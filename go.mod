@@ -7,7 +7,7 @@ require (
 	filippo.io/hpke v0.4.0
 	filippo.io/nistec v0.0.4
 	github.com/foxboron/swtpm_test v0.0.0-20230713215421-517b6cf0f7cd
-	github.com/google/go-tpm v0.9.1-0.20230629100720-f17b0354fbfc
+	github.com/google/go-tpm v0.9.7
 	github.com/google/go-tpm-tools v0.3.13-0.20230620182252-4639ecce2aba
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/spf13/cobra v1.7.0
