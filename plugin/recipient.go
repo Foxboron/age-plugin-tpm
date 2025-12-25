@@ -1,77 +1,72 @@
 package plugin
 
 import (
-	"bytes"
 	"crypto/ecdh"
-	"crypto/elliptic"
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"io"
-	"math/big"
 
+	"filippo.io/age"
 	"filippo.io/age/plugin"
+	"filippo.io/age/tag"
+	"filippo.io/nistec"
 	"github.com/google/go-tpm/tpm2"
 )
 
-type Recipient struct {
+func NewTagRecipientFromBytes(s []byte) (*tag.Recipient, error) {
+	ecdhKey, err := PublicToECDH(tpm2.BytesAs2B[tpm2.TPMTPublic](s))
+	if err != nil {
+		return nil, err
+	}
+	return NewTagRecipient(ecdhKey)
+}
+
+func NewTagRecipient(ecc *ecdh.PublicKey) (*tag.Recipient, error) {
+	return tag.NewClassicRecipient(MarshalCompressedEC(ecc))
+}
+
+type TPMRecipient struct {
 	Pubkey *ecdh.PublicKey
 	tag    []byte
 }
 
-// Returns the 4 first bytes of a sha256 sum of the key
-// this is used to to find the correct identity in a stanza
-func (r *Recipient) Tag() []byte {
+func (r *TPMRecipient) Tag() []byte {
 	return r.tag
 }
 
-func (r *Recipient) String() string {
-	return EncodeRecipient(r)
+func (r *TPMRecipient) Bytes() []byte {
+	p, err := nistec.NewP256Point().SetBytes(r.Pubkey.Bytes())
+	if err != nil {
+		panic("internal error: invalid P-256 public key")
+	}
+	return p.BytesCompressed()
 }
 
-func NewRecipient(ecc *ecdh.PublicKey) *Recipient {
+func (r *TPMRecipient) String() string {
+	return plugin.EncodeRecipient(PluginName, r.Bytes())
+}
+
+func (r *TPMRecipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
+	wrapped, sessionKey, err := EncryptFileKey(fileKey, r.Pubkey)
+	if err != nil {
+		return nil, err
+	}
+	return []*age.Stanza{{
+		Type: "tpm-ecc",
+		Args: []string{b64Encode(r.Tag()), b64Encode(sessionKey)},
+		Body: wrapped,
+	}}, nil
+}
+
+func NewTPMRecipient(ecc *ecdh.PublicKey) *TPMRecipient {
 	sum := sha256.Sum256(ecc.Bytes())
-	return &Recipient{
+	return &TPMRecipient{
 		Pubkey: ecc,
 		tag:    sum[:4],
 	}
 }
 
-func NewRecipientFromBytes(s []byte) (*Recipient, error) {
-	c := tpm2.BytesAs2B[tpm2.TPMTPublic](s)
-	pub, err := c.Contents()
-	if err != nil {
-		return nil, err
-	}
-	ecc, err := pub.Unique.ECC()
-	if err != nil {
-		return nil, err
-	}
-
-	ecdhKey, err := ecdh.P256().NewPublicKey(elliptic.Marshal(elliptic.P256(),
-		big.NewInt(0).SetBytes(ecc.X.Buffer),
-		big.NewInt(0).SetBytes(ecc.Y.Buffer),
-	))
-	if err != nil {
-		return nil, err
-	}
-
-	return NewRecipient(ecdhKey), nil
-}
-
-func EncodeRecipient(recipient *Recipient) string {
-	var b bytes.Buffer
-	binary.Write(&b, binary.BigEndian, MarshalCompressedEC(recipient.Pubkey))
-	return plugin.EncodeRecipient(PluginName, b.Bytes())
-}
-
-func MarshalRecipient(pubkey *Recipient, w io.Writer) error {
-	recipient := EncodeRecipient(pubkey)
-	fmt.Fprintf(w, "%s\n", recipient)
-	return nil
-}
-
-func DecodeRecipient(s string) (*Recipient, error) {
+func ParseTPMRecipient(s string) (*TPMRecipient, error) {
 	name, b, err := plugin.ParseRecipient(s)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode recipient: %v", err)
@@ -79,11 +74,18 @@ func DecodeRecipient(s string) (*Recipient, error) {
 	if name != PluginName {
 		return nil, fmt.Errorf("invalid plugin for type %s", name)
 	}
-
-	_, _, ecdhKey, err := UnmarshalCompressedEC(b)
+	p, err := nistec.NewP256Point().SetBytes(b)
 	if err != nil {
 		return nil, err
 	}
+	pubkey, err := ecdh.P256().NewPublicKey(p.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	return NewTPMRecipient(pubkey), nil
+}
 
-	return NewRecipient(ecdhKey), nil
+func MarshalRecipient(recipient fmt.Stringer, w io.Writer) error {
+	fmt.Fprintf(w, "%s\n", recipient.String())
+	return nil
 }

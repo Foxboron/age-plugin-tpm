@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -10,6 +9,7 @@ import (
 
 	"filippo.io/age"
 	page "filippo.io/age/plugin"
+	"filippo.io/age/tag"
 	"github.com/foxboron/age-plugin-tpm/plugin"
 	"github.com/google/go-tpm/tpm2/transport"
 	"github.com/spf13/cobra"
@@ -17,15 +17,15 @@ import (
 )
 
 type PluginOptions struct {
-	SwTPM      bool
-	AgePlugin  string
-	Convert    bool
-	Generate   bool
-	Decrypt    bool
-	Encrypt    bool
-	OutputFile string
-	LogFile    string
-	PIN        bool
+	AgePlugin         string
+	Convert           bool
+	Generate          bool
+	Decrypt           bool
+	Encrypt           bool
+	OutputFile        string
+	LogFile           string
+	OldStyleRecipient bool
+	PIN               bool
 }
 
 var example = `
@@ -41,7 +41,6 @@ var example = `
   Hello World`
 
 var (
-	swtpmPath     = "/var/tmp/age-plugin-tpm"
 	pluginOptions = PluginOptions{}
 	rootCmd       = &cobra.Command{
 		Use:     "age-plugin-tpm",
@@ -73,7 +72,7 @@ func clearLine(out io.Writer) {
 }
 
 func GetPin(prompt string) ([]byte, error) {
-	fmt.Printf("%s ", prompt)
+	fmt.Fprintf(os.Stderr, "%s ", prompt)
 	return term.ReadPassword(int(os.Stdin.Fd()))
 }
 
@@ -112,11 +111,16 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 			out = f
 		}
 
+		var rcp fmt.Stringer
 		identity, recipient, err := plugin.CreateIdentity(tpm, pin)
 		if err != nil {
 			return err
 		}
-		if err = plugin.MarshalIdentity(identity, recipient, out); err != nil {
+		rcp = recipient
+		if pluginOptions.OldStyleRecipient {
+			rcp = identity.TPMRecipient()
+		}
+		if err = plugin.MarshalIdentity(identity, rcp, out); err != nil {
 			return err
 		}
 	case pluginOptions.Convert:
@@ -132,9 +136,14 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 		if err != nil {
 			return err
 		}
-		recipient, err := identity.Recipient()
-		if err != nil {
-			return err
+		var recipient fmt.Stringer
+		if pluginOptions.OldStyleRecipient {
+			recipient = identity.TPMRecipient()
+		} else {
+			recipient, err = identity.Recipient()
+			if err != nil {
+				return err
+			}
 		}
 		return plugin.MarshalRecipient(recipient, out)
 	default:
@@ -143,104 +152,7 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 	return nil
 }
 
-func b64Decode(s string) ([]byte, error) {
-	return base64.RawStdEncoding.Strict().DecodeString(s)
-}
-
-func b64Encode(s []byte) string {
-	return base64.RawStdEncoding.Strict().EncodeToString(s)
-}
-
-type Recipient struct {
-	*plugin.Recipient
-}
-
-func (r *Recipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
-	wrapped, sessionKey, err := plugin.EncryptFileKey(fileKey, r.Pubkey)
-	if err != nil {
-		return nil, err
-	}
-	return []*age.Stanza{{
-		Type: "tpm-ecc",
-		Args: []string{b64Encode(r.Tag()), b64Encode(sessionKey)},
-		Body: wrapped,
-	}}, nil
-}
-
-type Identity struct {
-	*plugin.Identity
-	p   *page.Plugin
-	tpm transport.TPMCloser
-}
-
-func (i *Identity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err error) {
-	for _, stanza := range stanzas {
-		// We only understand "tpm-ecc" stanzas
-		if len(stanza.Args) < 2 || stanza.Type != "tpm-ecc" {
-			continue
-		}
-
-		tag, err := b64Decode(stanza.Args[0])
-		if err != nil {
-			return nil, fmt.Errorf("failed base64 decode session key: %v", err)
-		}
-
-		sessionKey, err := b64Decode(stanza.Args[1])
-		if err != nil {
-			return nil, fmt.Errorf("failed base64 decode session key: %v", err)
-		}
-
-		resp, err := i.Recipient()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get recipient for identity: %v", err)
-		}
-
-		// Check if we are dealing with the correct key
-		if !bytes.Equal(tag, resp.Tag()) {
-			continue
-		}
-
-		var pin []byte
-		if i.PIN == plugin.HasPIN {
-			if s := os.Getenv("AGE_TPM_PIN"); s != "" {
-				pin = []byte(s)
-			} else if s := os.Getenv("AGE_TPM_PINENTRY"); s != "" {
-				pin, err = plugin.GetPinentry()
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				ps, err := i.p.RequestValue("Please enter the PIN for the key:", true)
-				if err != nil {
-					return nil, err
-				}
-				pin = []byte(ps)
-			}
-		}
-
-		return plugin.DecryptFileKeyTPM(i.tpm, i.Identity, sessionKey, stanza.Body, pin)
-	}
-	return nil, age.ErrIncorrectIdentity
-}
-
-func getTPM() (*plugin.TPMDevice, error) {
-	// plugin.Log.Println("Fetching TPM device")
-	var tpm *plugin.TPMDevice
-	var err error
-	if pluginOptions.SwTPM || os.Getenv("AGE_TPM_SWTPM") != "" {
-		tpm, err = plugin.NewSwTPM(swtpmPath)
-	} else {
-		tpm, err = plugin.NewTPM("")
-	}
-	if err != nil {
-		return nil, err
-	}
-	tpm.Watch()
-	return tpm, nil
-}
-
 func RunPlugin(cmd *cobra.Command, args []string) error {
-
 	switch pluginOptions.AgePlugin {
 	case "recipient-v1":
 		plugin.Log.Println("Got recipient-v1")
@@ -249,17 +161,18 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		p.HandleRecipient(func(data []byte) (age.Recipient, error) {
-			r, err := plugin.DecodeRecipient(page.EncodeRecipient("tpm", data))
-			if err != nil {
-				return nil, err
+			if p != nil {
+				if err := p.DisplayMessage("The recipient was created with a previous version of age-plugin-tpm, please convert or create a new recipient."); err != nil {
+					return nil, fmt.Errorf("failed displaying message: %v", err)
+				}
 			}
-			return &Recipient{r}, nil
+			return tag.NewClassicRecipient(data)
 		})
 		if exitCode := p.RecipientV1(); exitCode != 0 {
 			return fmt.Errorf("age-plugin exited with code %d", exitCode)
 		}
 	case "identity-v1":
-		tpm, err := getTPM()
+		tpm, err := plugin.NewTPM("")
 		if err != nil {
 			return err
 		}
@@ -274,13 +187,32 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return nil, err
 			}
-			return &Identity{i, p, tpm.TPM()}, nil
+			// Set callbacks for TPM and PIN access
+			i.Callbacks(p, tpm,
+				func() ([]byte, error) {
+					var pin []byte
+					if s := os.Getenv("AGE_TPM_PIN"); s != "" {
+						pin = []byte(s)
+					} else if s := os.Getenv("AGE_TPM_PINENTRY"); s != "" {
+						pin, err = plugin.GetPinentry()
+						if err != nil {
+							return nil, err
+						}
+					} else {
+						ps, err := p.RequestValue("Please enter the PIN for the key:", true)
+						if err != nil {
+							return nil, err
+						}
+						pin = []byte(ps)
+					}
+					return pin, nil
+				},
+			)
+			return i, nil
 		})
-		if exitCode := p.IdentityV1(); exitCode != 0 {
-			return fmt.Errorf("age-plugin exited with code %d", exitCode)
-		}
+		os.Exit(p.Main())
 	default:
-		tpm, err := getTPM()
+		tpm, err := plugin.NewTPM("")
 		if err != nil {
 			return err
 		}
@@ -294,7 +226,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			defer f.Close()
 			in = f
 		}
-		return RunCli(cmd, tpm.TPM(), in, os.Stdout)
+		return RunCli(cmd, tpm, in, os.Stdout)
 	}
 	return nil
 }
@@ -312,8 +244,8 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 	// Debug or logging stuff
 	flags.StringVar(&pluginOptions.LogFile, "log-file", "", "Logging file for debug output")
 
-	// SWTPM functionality
-	flags.BoolVar(&pluginOptions.SwTPM, "swtpm", false, "Use a software TPM for key storage (Testing only and requires swtpm installed)")
+	// Old style recipient
+	flags.BoolVar(&pluginOptions.OldStyleRecipient, "tpm-recipient", false, "Use the old-style tpm recipient instead of the new p256tag recipient.")
 
 	// Hidden commands
 	flags.BoolVar(&pluginOptions.Decrypt, "decrypt", false, "wip")

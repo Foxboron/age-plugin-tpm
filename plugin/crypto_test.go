@@ -47,21 +47,30 @@ func TestEncryptionDecryption(t *testing.T) {
 			filekey:    []byte("this is a test filekey"),
 			pin:        []byte(""),
 			decryptpin: []byte("123"),
-			shouldfail: true,
+			shouldfail: false,
 		},
 	}
 
 	for n, c := range cases {
 		t.Run(fmt.Sprintf("case %d, %s", n, c.msg), func(t *testing.T) {
-			identity, recipient, err1 := CreateIdentity(tpm, c.pin)
+			identity, _, err1 := CreateIdentity(tpm, c.pin)
+			identity.Callbacks(nil, tpm, func() ([]byte, error) {
+				return c.decryptpin, nil
+			})
 
-			wrappedFileKey, sessionKey, err2 := EncryptFileKey(c.filekey, recipient.Pubkey)
+			// Ensure we can always use both recipients
+			recipient := identity.TPMRecipient()
+			stanzas, err2 := recipient.Wrap(c.filekey)
+			unwrappedFileKey, err3 := identity.Unwrap(stanzas)
 
-			unwrappedFileKey, err3 := DecryptFileKeyTPM(tpm, identity, sessionKey, wrappedFileKey, c.decryptpin)
-
-			err := errors.Join(err1, err2, err3)
-
+			rrecipient, err := identity.Recipient()
 			if err != nil {
+				t.Fatal(err)
+			}
+			stanzas, err22 := rrecipient.Wrap(c.filekey)
+			unwrappedFileKey2, err33 := identity.Unwrap(stanzas)
+
+			if errors.Join(err, err1, err2, err3, err22, err33) != nil {
 				if c.shouldfail {
 					return
 				}
@@ -73,6 +82,9 @@ func TestEncryptionDecryption(t *testing.T) {
 			}
 
 			if !bytes.Equal(c.filekey, unwrappedFileKey) {
+				t.Fatalf("filkeys are not the same")
+			}
+			if !bytes.Equal(c.filekey, unwrappedFileKey2) {
 				t.Fatalf("filkeys are not the same")
 			}
 		})

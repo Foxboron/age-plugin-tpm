@@ -2,8 +2,10 @@ package plugin
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 
+	"filippo.io/age/tag"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
 )
@@ -71,7 +73,7 @@ func createTransientSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPu
 // Creates a new identity. It initializes a new SRK parent in the TPM and
 // returns the identity and the corresponding recipient.
 // Note: It does not load the identity key into the TPM.
-func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *Recipient, error) {
+func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *tag.Recipient, error) {
 	srkHandle, srkPublic, err := getSharedSRK(tpm)
 	if err != nil {
 		Log.Printf("failed to acquire shared SRK, falling back to creating transient SRK: %v\n", err)
@@ -136,12 +138,18 @@ func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *Recipient,
 		return nil, nil, fmt.Errorf("failed creating TPM key: %v", err)
 	}
 
+	ecdhKey, err := PublicToECDH(eccRsp.OutPublic)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	identity := &Identity{
-		Version: 2,
-		PIN:     pinstatus,
-		Private: eccRsp.OutPrivate,
-		Public:  eccRsp.OutPublic,
-		SRKName: &srkHandle.Name,
+		Version:   2,
+		PIN:       pinstatus,
+		Private:   eccRsp.OutPrivate,
+		Public:    eccRsp.OutPublic,
+		SRKName:   &srkHandle.Name,
+		publickey: ecdhKey,
 	}
 
 	recipient, err := identity.Recipient()
@@ -174,7 +182,7 @@ func AcquireIdentitySRK(tpm transport.TPMCloser, identity *Identity) (*tpm2.Auth
 	// Otherwise fall back to trying to create a transient SRK
 	srkHandle, srkPublic, err := createTransientSRK(tpm)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create transient SRK while trying to acquire identity SRK: %v\n", err)
+		return nil, nil, fmt.Errorf("failed to create transient SRK while trying to acquire identity SRK: %v", err)
 	}
 
 	// We didn't store the SRK name for identity version 1, so just assume that this SRK is the right one
@@ -202,4 +210,12 @@ func LoadIdentityWithParent(tpm transport.TPMCloser, parent tpm2.AuthHandle, ide
 		Name:   loadBlobRsp.Name,
 		Auth:   tpm2.PasswordAuth(nil),
 	}, nil
+}
+
+func b64Decode(s string) ([]byte, error) {
+	return base64.RawStdEncoding.Strict().DecodeString(s)
+}
+
+func b64Encode(s []byte) string {
+	return base64.RawStdEncoding.Strict().EncodeToString(s)
 }
