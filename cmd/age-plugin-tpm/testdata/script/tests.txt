@@ -1,6 +1,16 @@
 # Use the plugin with age
-
 exec age-plugin-tpm --generate -o age-identity.txt
+stdin age-identity.txt
+exec age-plugin-tpm -y -o age-recipient.txt
+stdin input.txt
+exec age -R ./age-recipient.txt -o encrypted.txt
+stdin encrypted.txt
+exec age --decrypt -i ./age-identity.txt -o -
+stdout 'Hello World'
+exec rm age-identity.txt age-recipient.txt encrypted.txt
+
+# Create an old-style identity and decrypt
+exec age-plugin-tpm --generate --tpm-recipient -o age-identity.txt
 stdin age-identity.txt
 exec age-plugin-tpm -y -o age-recipient.txt
 stdin input.txt

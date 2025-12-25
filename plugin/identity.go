@@ -76,7 +76,7 @@ func (i *Identity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err error) {
 			resp = NewTPMTagIdentity(i.tpm, i.pin, i)
 		case "tpm-ecc":
 			if i.p != nil {
-				if err := i.p.DisplayMessage("detected old key type. Please migrate to the new p256tag key type"); err != nil {
+				if err := i.p.DisplayMessage("The file was encrypted with a previous version of age-plugin-tpm. Please re-encrypt the file!"); err != nil {
 					return nil, fmt.Errorf("failed displaying message: %v", err)
 				}
 			}
@@ -98,6 +98,10 @@ func (i *Identity) Serialize() []any {
 		&i.Version,
 		&i.PIN,
 	}
+}
+
+func (i *Identity) TPMRecipient() *TPMRecipient {
+	return NewTPMRecipient(i.publickey)
 }
 
 func (i *Identity) Recipient() (*tag.Recipient, error) {

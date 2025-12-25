@@ -17,15 +17,16 @@ import (
 )
 
 type PluginOptions struct {
-	SwTPM      bool
-	AgePlugin  string
-	Convert    bool
-	Generate   bool
-	Decrypt    bool
-	Encrypt    bool
-	OutputFile string
-	LogFile    string
-	PIN        bool
+	SwTPM             bool
+	AgePlugin         string
+	Convert           bool
+	Generate          bool
+	Decrypt           bool
+	Encrypt           bool
+	OutputFile        string
+	LogFile           string
+	OldStyleRecipient bool
+	PIN               bool
 }
 
 var example = `
@@ -112,11 +113,16 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 			out = f
 		}
 
+		var rcp fmt.Stringer
 		identity, recipient, err := plugin.CreateIdentity(tpm, pin)
 		if err != nil {
 			return err
 		}
-		if err = plugin.MarshalIdentity(identity, recipient, out); err != nil {
+		rcp = recipient
+		if pluginOptions.OldStyleRecipient {
+			rcp = identity.TPMRecipient()
+		}
+		if err = plugin.MarshalIdentity(identity, rcp, out); err != nil {
 			return err
 		}
 	case pluginOptions.Convert:
@@ -132,9 +138,14 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 		if err != nil {
 			return err
 		}
-		recipient, err := identity.Recipient()
-		if err != nil {
-			return err
+		var recipient fmt.Stringer
+		if pluginOptions.OldStyleRecipient {
+			recipient = identity.TPMRecipient()
+		} else {
+			recipient, err = identity.Recipient()
+			if err != nil {
+				return err
+			}
 		}
 		return plugin.MarshalRecipient(recipient, out)
 	default:
@@ -168,6 +179,11 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		p.HandleRecipient(func(data []byte) (age.Recipient, error) {
+			if p != nil {
+				if err := p.DisplayMessage("The recipient was created with a previous version of age-plugin-tpm, please convert or create a new recipient."); err != nil {
+					return nil, fmt.Errorf("failed displaying message: %v", err)
+				}
+			}
 			return tag.NewClassicRecipient(data)
 		})
 		if exitCode := p.RecipientV1(); exitCode != 0 {
@@ -248,6 +264,9 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 
 	// SWTPM functionality
 	flags.BoolVar(&pluginOptions.SwTPM, "swtpm", false, "Use a software TPM for key storage (Testing only and requires swtpm installed)")
+
+	// Old style recipient
+	flags.BoolVar(&pluginOptions.OldStyleRecipient, "tpm-recipient", false, "Use the old-style tpm recipient instead of the new p256tag recipient.")
 
 	// Hidden commands
 	flags.BoolVar(&pluginOptions.Decrypt, "decrypt", false, "wip")

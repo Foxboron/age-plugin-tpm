@@ -85,7 +85,7 @@ func ParseTPMRecipient(s string) (*TPMRecipient, error) {
 	return NewTPMRecipient(pubkey), nil
 }
 
-func MarshalRecipient(recipient *tag.Recipient, w io.Writer) error {
+func MarshalRecipient(recipient fmt.Stringer, w io.Writer) error {
 	fmt.Fprintf(w, "%s\n", recipient.String())
 	return nil
 }
