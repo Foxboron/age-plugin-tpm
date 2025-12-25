@@ -74,7 +74,7 @@ func clearLine(out io.Writer) {
 }
 
 func GetPin(prompt string) ([]byte, error) {
-	fmt.Printf("%s ", prompt)
+	fmt.Fprintf(os.Stderr, "%s ", prompt)
 	return term.ReadPassword(int(os.Stdin.Fd()))
 }
 
