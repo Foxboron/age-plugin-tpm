@@ -17,7 +17,6 @@ import (
 )
 
 type PluginOptions struct {
-	SwTPM             bool
 	AgePlugin         string
 	Convert           bool
 	Generate          bool
@@ -42,7 +41,6 @@ var example = `
   Hello World`
 
 var (
-	swtpmPath     = "/var/tmp/age-plugin-tpm"
 	pluginOptions = PluginOptions{}
 	rootCmd       = &cobra.Command{
 		Use:     "age-plugin-tpm",
@@ -154,22 +152,6 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 	return nil
 }
 
-func getTPM() (*plugin.TPMDevice, error) {
-	// plugin.Log.Println("Fetching TPM device")
-	var tpm *plugin.TPMDevice
-	var err error
-	if pluginOptions.SwTPM || os.Getenv("AGE_TPM_SWTPM") != "" {
-		tpm, err = plugin.NewSwTPM(swtpmPath)
-	} else {
-		tpm, err = plugin.NewTPM("")
-	}
-	if err != nil {
-		return nil, err
-	}
-	tpm.Watch()
-	return tpm, nil
-}
-
 func RunPlugin(cmd *cobra.Command, args []string) error {
 	switch pluginOptions.AgePlugin {
 	case "recipient-v1":
@@ -190,7 +172,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("age-plugin exited with code %d", exitCode)
 		}
 	case "identity-v1":
-		tpm, err := getTPM()
+		tpm, err := plugin.NewTPM("")
 		if err != nil {
 			return err
 		}
@@ -206,7 +188,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 				return nil, err
 			}
 			// Set callbacks for TPM and PIN access
-			i.Callbacks(p, tpm.TPM(),
+			i.Callbacks(p, tpm,
 				func() ([]byte, error) {
 					var pin []byte
 					if s := os.Getenv("AGE_TPM_PIN"); s != "" {
@@ -230,7 +212,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 		})
 		os.Exit(p.Main())
 	default:
-		tpm, err := getTPM()
+		tpm, err := plugin.NewTPM("")
 		if err != nil {
 			return err
 		}
@@ -244,7 +226,7 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			defer f.Close()
 			in = f
 		}
-		return RunCli(cmd, tpm.TPM(), in, os.Stdout)
+		return RunCli(cmd, tpm, in, os.Stdout)
 	}
 	return nil
 }
@@ -261,9 +243,6 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 
 	// Debug or logging stuff
 	flags.StringVar(&pluginOptions.LogFile, "log-file", "", "Logging file for debug output")
-
-	// SWTPM functionality
-	flags.BoolVar(&pluginOptions.SwTPM, "swtpm", false, "Use a software TPM for key storage (Testing only and requires swtpm installed)")
 
 	// Old style recipient
 	flags.BoolVar(&pluginOptions.OldStyleRecipient, "tpm-recipient", false, "Use the old-style tpm recipient instead of the new p256tag recipient.")

@@ -11,19 +11,6 @@ which enables files to be encrypted to age identities sealed by the TPM.
 * PIN support
 * TPM session encryption
 
-# Experimental
-
-The identity format and technical details might change between iterations.
-Consider this plugin experimental.
-
-Instead of utilizing the TPM directly, you can use `--swtpm` or `export
-AGE_TPM_SWTPM=1` to create a identity backed by
-[swtpm](https://github.com/stefanberger/swtpm) which will be stored under
-`/var/tmp/age-plugin-tpm`.
-
-Note that `swtpm` provides no security properties and should only be used for
-testing.
-
 ## Installation
 
 The simplest way of installing this plugin is by running the follow go command.

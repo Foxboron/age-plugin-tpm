@@ -11,15 +11,11 @@ github.com/cpuguy83/go-md2man/v2 v2.0.2/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46t
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/foxboron/swtpm_test v0.0.0-20230713215421-517b6cf0f7cd h1:Ajqx+ZZdKeO2IrnJh9XAIG2ghX8Opk5Leo3zjPeAL+k=
-github.com/foxboron/swtpm_test v0.0.0-20230713215421-517b6cf0f7cd/go.mod h1:m1pxP83YCdVpX9CTuDsYeG7fkSMPKyXJDWy86NNSE6M=
 github.com/godbus/dbus/v5 v5.0.4/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/golang/mock v1.6.0 h1:ErTB+efbowRARo13NNdxyJji2egdxLGQhRaY+DUumQc=
 github.com/golang/mock v1.6.0/go.mod h1:p6yTPP+5HYm5mzsMV8JkE6ZKdX+/wYM6Hr+LicevLPs=
 github.com/google/go-sev-guest v0.6.1 h1:NajHkAaLqN9/aW7bCFSUplUMtDgk2+HcN7jC2btFtk0=
 github.com/google/go-sev-guest v0.6.1/go.mod h1:UEi9uwoPbLdKGl1QHaq1G8pfCbQ4QP0swWX4J0k6r+Q=
-github.com/google/go-tpm v0.9.1-0.20230629100720-f17b0354fbfc h1:5ERVUw2INcGD/BHQ3cFdTtKznOGZXkFMlRylzOVRVKM=
-github.com/google/go-tpm v0.9.1-0.20230629100720-f17b0354fbfc/go.mod h1:FkNVkc6C+IsvDI9Jw1OveJmxGZUUaKxtrpOS47QWKfU=
 github.com/google/go-tpm v0.9.7 h1:u89J4tUUeDTlH8xxC3CTW7OHZjbjKoHdQ9W7gCUhtxA=
 github.com/google/go-tpm v0.9.7/go.mod h1:h9jEsEECg7gtLis0upRBQU+GhYVH6jMjrFxI8u6bVUY=
 github.com/google/go-tpm-tools v0.3.13-0.20230620182252-4639ecce2aba h1:qJEJcuLzH5KDR0gKc0zcktin6KSAwL7+jWKBYceddTc=
