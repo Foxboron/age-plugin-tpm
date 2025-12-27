@@ -1,7 +1,7 @@
 c2sp.org/CCTV/age v0.0.0-20251208015420-e9274a7bdbfd h1:ZLsPO6WdZ5zatV4UfVpr7oAwLGRZ+sebTUruuM4Ra3M=
 c2sp.org/CCTV/age v0.0.0-20251208015420-e9274a7bdbfd/go.mod h1:SrHC2C7r5GkDk8R+NFVzYy/sdj0Ypg9htaPXQq5Cqeo=
-filippo.io/age v1.2.2-0.20251224113631-a62324430d84 h1:s09QYkwFqDL3uhddQnMxwBL0GTYGawPjLs8js6JoEe0=
-filippo.io/age v1.2.2-0.20251224113631-a62324430d84/go.mod h1:z5H4mDUHN0BjP/0uy4rF2dXCfDF79Ip4izO6ZthrNBg=
+filippo.io/age v1.3.0 h1:Pd+kiLApjp+OlJ6bBvmioX2QABosEeTxXgl0rpKwqF0=
+filippo.io/age v1.3.0/go.mod h1:EZorDTYUxt836i3zdori5IJX/v2Lj6kWFU0cfh6C0D4=
 filippo.io/hpke v0.4.0 h1:p575VVQ6ted4pL+it6M00V/f2qTZITO0zgmdKCkd5+A=
 filippo.io/hpke v0.4.0/go.mod h1:EmAN849/P3qdeK+PCMkDpDm83vRHM5cDipBJ8xbQLVY=
 filippo.io/nistec v0.0.4 h1:F14ZHT5htWlMnQVPndX9ro9arf56cBhQxq4LnDI491s=

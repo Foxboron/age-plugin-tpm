@@ -3,7 +3,7 @@ module github.com/foxboron/age-plugin-tpm
 go 1.25.0
 
 require (
-	filippo.io/age v1.2.2-0.20251224113631-a62324430d84
+	filippo.io/age v1.3.0
 	filippo.io/hpke v0.4.0
 	filippo.io/nistec v0.0.4
 	github.com/google/go-tpm v0.9.7
