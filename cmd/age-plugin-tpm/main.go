@@ -193,11 +193,6 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 					var pin []byte
 					if s := os.Getenv("AGE_TPM_PIN"); s != "" {
 						pin = []byte(s)
-					} else if s := os.Getenv("AGE_TPM_PINENTRY"); s != "" {
-						pin, err = plugin.GetPinentry()
-						if err != nil {
-							return nil, err
-						}
 					} else {
 						ps, err := p.RequestValue("Please enter the PIN for the key:", true)
 						if err != nil {
