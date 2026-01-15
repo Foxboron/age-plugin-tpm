@@ -38,14 +38,19 @@ var example = `
   $ echo "Hello World" | age -r "age1tpm1syqqqpqrtxsnkkqlmu505zzrq439hetls4qwwmyhsv8dgjhksvtewvx29lxs7s68qy" > secret.age
 
   $ age --decrypt -i age-identity.txt -o - secret.age
-  Hello World`
+  Hello World
+
+  $ age-plugin-tpm --version
+  1.0.0`
 
 var (
+	version       = "dev"
 	pluginOptions = PluginOptions{}
 	rootCmd       = &cobra.Command{
 		Use:     "age-plugin-tpm",
 		Long:    "age-plugin-tpm is a tool to generate age compatible identities backed by a TPM.",
 		Example: example,
+		Version: version,
 		RunE:    RunPlugin,
 	}
 )
