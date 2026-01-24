@@ -19,5 +19,28 @@ stdin encrypted.txt
 exec age --decrypt -i ./age-identity.txt -o -
 stdout 'Hello World'
 
+# Encrypt to multiple recipients and decrypt
+exec age-plugin-tpm -g -o identity.txt
+exec age-plugin-tpm -y identity.txt -o recipient.txt
+exec age-plugin-tpm -g -o identity2.txt
+exec age-plugin-tpm -y identity2.txt -o recipient2.txt
+exec cat recipient.txt recipient2.txt
+stdin stdout
+exec tee recipients.txt
+exec cat recipient2.txt recipient.txt
+stdin stdout
+exec tee recipients-swapped.txt
+stdin input.txt
+exec age -R recipients.txt -o secret.age
+stdin secret.age
+exec age -i identity.txt -d
+stdout 'Hello World'
+stdin input.txt
+exec age -R recipients-swapped.txt -o secret.age
+stdin secret.age
+exec age -i identity.txt -d
+stdout 'Hello World'
+exec rm identity.txt identity2.txt recipient.txt recipient2.txt recipients.txt recipients-swapped.txt
+
 -- input.txt --
 Hello World

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/ecdh"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -84,7 +85,11 @@ func (i *Identity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err error) {
 		default:
 			continue
 		}
-		return resp.Unwrap([]*age.Stanza{stanza})
+		fileKey, err := resp.Unwrap([]*age.Stanza{stanza})
+		if errors.Is(err, age.ErrIncorrectIdentity) {
+			continue
+		}
+		return fileKey, err
 	}
 	return nil, age.ErrIncorrectIdentity
 }
