@@ -34,7 +34,7 @@ jobs:
           DIR="$(mktemp -d)"
           mkdir "$DIR/age-plugin-tpm"
           cp "$RUNNER_TEMP/LICENSE" "$DIR/age-plugin-tpm"
-          go build -o "$DIR/age-plugin-tpm" -ldflags "-X main.Version=$VERSION" -trimpath ./cmd/...
+          go build -o "$DIR/age-plugin-tpm" -ldflags "-X main.version=$VERSION" -trimpath ./cmd/...
           tar -cvzf "age-plugin-tpm-$VERSION-$GOOS-$GOARCH.tar.gz" -C "$DIR" age-plugin-tpm
         env:
           CGO_ENABLED: 0

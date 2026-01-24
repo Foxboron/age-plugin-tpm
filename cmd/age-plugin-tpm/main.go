@@ -41,11 +41,13 @@ var example = `
   Hello World`
 
 var (
+	version       = "dev"
 	pluginOptions = PluginOptions{}
 	rootCmd       = &cobra.Command{
 		Use:     "age-plugin-tpm",
 		Long:    "age-plugin-tpm is a tool to generate age compatible identities backed by a TPM.",
 		Example: example,
+		Version: version,
 		RunE:    RunPlugin,
 	}
 )
