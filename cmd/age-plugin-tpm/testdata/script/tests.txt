@@ -40,7 +40,15 @@ exec age -R recipients-swapped.txt -o secret.age
 stdin secret.age
 exec age -i identity.txt -d
 stdout 'Hello World'
-exec rm identity.txt identity2.txt recipient.txt recipient2.txt recipients.txt recipients-swapped.txt
+# Generate identity with persistent SRK at custom handle and decrypt
+exec age-plugin-tpm --generate --persist-srk --srk-handle 0x81000002 -o srk-identity.txt
+exec age-plugin-tpm -y srk-identity.txt -o srk-recipient.txt
+stdin input.txt
+exec age -R srk-recipient.txt -o srk-secret.age
+stdin srk-secret.age
+exec age -i srk-identity.txt -d
+stdout 'Hello World'
+exec rm srk-identity.txt srk-recipient.txt srk-secret.age
 
 -- input.txt --
 Hello World

@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 
 	"filippo.io/age/tag"
 	"github.com/google/go-tpm/tpm2"
@@ -11,20 +14,42 @@ import (
 )
 
 const (
-	PluginName = "tpm"
+	PluginName       = "tpm"
+	DefaultSRKHandle = 0x81000001
 )
 
-func getSharedSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
-	const SRK_HANDLE tpm2.TPMIDHObject = 0x81000001
+var SRKHandle tpm2.TPMIDHObject = DefaultSRKHandle
 
+func ParseHandle(s string) (tpm2.TPMIDHObject, error) {
+	s = strings.TrimSpace(s)
+	val, err := strconv.ParseUint(s, 0, 32)
+	if err != nil {
+		return 0, fmt.Errorf("invalid TPM handle %q: %w", s, err)
+	}
+	return tpm2.TPMIDHObject(val), nil
+}
+
+func SetSRKHandle(h tpm2.TPMIDHObject) {
+	SRKHandle = h
+}
+
+func GetSRKHandle() tpm2.TPMIDHObject {
+	if s := os.Getenv("AGE_TPM_SRK_HANDLE"); s != "" {
+		if h, err := ParseHandle(s); err == nil {
+			return h
+		}
+	}
+	return SRKHandle
+}
+
+func getSRKByHandle(tpm transport.TPMCloser, handle tpm2.TPMIDHObject) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
 	srk := tpm2.ReadPublic{
-		ObjectHandle: SRK_HANDLE,
+		ObjectHandle: handle,
 	}
 
-	var rsp *tpm2.ReadPublicResponse
 	rsp, err := srk.Execute(tpm)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to acquire primary key: %v", err)
+		return nil, nil, fmt.Errorf("failed to acquire primary key at 0x%08x: %v", handle, err)
 	}
 
 	srkPublic, err := rsp.OutPublic.Contents()
@@ -33,10 +58,78 @@ func getSharedSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, 
 	}
 
 	return &tpm2.AuthHandle{
-		Handle: SRK_HANDLE,
+		Handle: handle,
 		Name:   rsp.Name,
 		Auth:   tpm2.PasswordAuth(nil),
 	}, srkPublic, nil
+}
+
+func getSharedSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
+	return getSRKByHandle(tpm, GetSRKHandle())
+}
+
+func findPersistentSRKByName(tpm transport.TPMCloser, name []byte) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
+	caps, err := tpm2.GetCapability{
+		Capability:    tpm2.TPMCapHandles,
+		Property:      uint32(tpm2.TPMHTPersistent) << 24,
+		PropertyCount: 64,
+	}.Execute(tpm)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	handles, err := caps.CapabilityData.Data.Handles()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, h := range handles.Handle {
+		if h < 0x81000000 || h > 0x81FFFFFF {
+			continue
+		}
+		authHandle, pub, err := getSRKByHandle(tpm, tpm2.TPMIDHObject(h))
+		if err == nil && bytes.Equal(authHandle.Name.Buffer, name) {
+			return authHandle, pub, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("no persistent handle found with matching name")
+}
+
+func PersistSRK(tpm transport.TPMCloser, handle tpm2.TPMIDHObject) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
+	// First check if the handle already exists with a matching ECC SRK
+	existingHandle, existingPublic, err := getSRKByHandle(tpm, handle)
+	if err == nil {
+		if existingPublic.Type == tpm2.TPMAlgECC {
+			return existingHandle, existingPublic, nil
+		}
+		return nil, nil, fmt.Errorf("handle 0x%08x is already occupied by a non-ECC key", handle)
+	}
+
+	// Create transient ECC SRK
+	transientHandle, _, err := createTransientSRK(tpm)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed creating transient SRK: %v", err)
+	}
+	defer FlushHandle(tpm, transientHandle)
+
+	var ownerAuth []byte
+	if s := os.Getenv("AGE_TPM_OWNER_AUTH"); s != "" {
+		ownerAuth = []byte(s)
+	}
+
+	evict := tpm2.EvictControl{
+		Auth: tpm2.AuthHandle{
+			Handle: tpm2.TPMRHOwner,
+			Auth:   tpm2.PasswordAuth(ownerAuth),
+		},
+		ObjectHandle:     transientHandle,
+		PersistentHandle: tpm2.TPMIDHPersistent(handle),
+	}
+	if _, err := evict.Execute(tpm); err != nil {
+		return nil, nil, fmt.Errorf("failed persisting SRK at 0x%08x: %v", handle, err)
+	}
+
+	return getSRKByHandle(tpm, handle)
 }
 
 func createTransientSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
@@ -74,13 +167,30 @@ func createTransientSRK(tpm transport.TPMCloser) (*tpm2.AuthHandle, *tpm2.TPMTPu
 // returns the identity and the corresponding recipient.
 // Note: It does not load the identity key into the TPM.
 func CreateIdentity(tpm transport.TPMCloser, pin []byte) (*Identity, *tag.Recipient, error) {
-	srkHandle, srkPublic, err := getSharedSRK(tpm)
-	if err != nil {
-		Log.Printf("failed to acquire shared SRK, falling back to creating transient SRK: %v\n", err)
+	return CreateIdentityWithOptions(tpm, pin, false)
+}
 
-		srkHandle, srkPublic, err = createTransientSRK(tpm)
+func CreateIdentityWithOptions(tpm transport.TPMCloser, pin []byte, persistSRK bool) (*Identity, *tag.Recipient, error) {
+	var (
+		srkHandle *tpm2.AuthHandle
+		srkPublic *tpm2.TPMTPublic
+		err       error
+	)
+
+	if persistSRK {
+		srkHandle, srkPublic, err = PersistSRK(tpm, GetSRKHandle())
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create transient SRK (and no shared SRK could be acquired): %v", err)
+			return nil, nil, fmt.Errorf("failed persisting SRK: %v", err)
+		}
+	} else {
+		srkHandle, srkPublic, err = getSharedSRK(tpm)
+		if err != nil {
+			Log.Printf("failed to acquire shared SRK, falling back to creating transient SRK: %v\n", err)
+
+			srkHandle, srkPublic, err = createTransientSRK(tpm)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to create transient SRK (and no shared SRK could be acquired): %v", err)
+			}
 		}
 	}
 
@@ -175,6 +285,11 @@ func AcquireIdentitySRK(tpm transport.TPMCloser, identity *Identity) (*tpm2.Auth
 	if identity.Version > 1 {
 		srkHandle, srkPublic, err := getSharedSRK(tpm)
 		if err == nil && bytes.Equal(srkHandle.Name.Buffer, identity.SRKName.Buffer) {
+			return srkHandle, srkPublic, nil
+		}
+
+		srkHandle, srkPublic, err = findPersistentSRKByName(tpm, identity.SRKName.Buffer)
+		if err == nil {
 			return srkHandle, srkPublic, nil
 		}
 	}

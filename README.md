@@ -34,6 +34,26 @@ Hack The Planet!
 
 You can add `--pin` when calling `--generate` to require a PIN when encrypting or decrypting.
 
+### Persistent Storage Root Key (SRK)
+
+By default, the plugin attempts to use the standard shared SRK at `0x81000001` or falls back to deriving a transient SRK on the fly. Deriving a transient SRK with `CreatePrimary` incurs an additional 100–300 ms latency on every decryption.
+
+You can persist the ECC SRK to TPM NVRAM when generating an identity:
+
+```bash
+# Persist SRK at default handle (0x81000001) or a custom handle:
+$ age-plugin-tpm --generate --persist-srk --srk-handle 0x81000001 -o age-identity.txt
+```
+
+If your persistent SRK is located at a non-default handle (e.g. `0x81000002` on systems where `0x81000001` is reserved for RSA), you can specify it via `--srk-handle` or export `AGE_TPM_SRK_HANDLE`:
+
+```bash
+$ export AGE_TPM_SRK_HANDLE=0x81000002
+$ age --decrypt -i age-identity.txt -o - test-decrypt.txt
+```
+
+The plugin also automatically scans TPM persistent handles for an SRK matching the identity's recorded SRK name if the default handle does not match.
+
 ### When used non-interactively
 
 If you want to use a `--pin` non-interactively, you can use the `AGE_TPM_PIN` environment variable.

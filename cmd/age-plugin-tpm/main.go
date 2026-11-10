@@ -26,6 +26,8 @@ type PluginOptions struct {
 	LogFile           string
 	OldStyleRecipient bool
 	PIN               bool
+	SRKHandle         string
+	PersistSRK        bool
 }
 
 var example = `
@@ -81,6 +83,15 @@ func GetPin(prompt string) ([]byte, error) {
 func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Writer) error {
 	var pin []byte
 	var err error
+
+	if pluginOptions.SRKHandle != "" {
+		h, err := plugin.ParseHandle(pluginOptions.SRKHandle)
+		if err != nil {
+			return err
+		}
+		plugin.SetSRKHandle(h)
+	}
+
 	switch {
 	case pluginOptions.Generate:
 
@@ -114,7 +125,7 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 		}
 
 		var rcp fmt.Stringer
-		identity, recipient, err := plugin.CreateIdentity(tpm, pin)
+		identity, recipient, err := plugin.CreateIdentityWithOptions(tpm, pin, pluginOptions.PersistSRK)
 		if err != nil {
 			return err
 		}
@@ -155,6 +166,14 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 }
 
 func RunPlugin(cmd *cobra.Command, args []string) error {
+	if pluginOptions.SRKHandle != "" {
+		h, err := plugin.ParseHandle(pluginOptions.SRKHandle)
+		if err != nil {
+			return err
+		}
+		plugin.SetSRKHandle(h)
+	}
+
 	switch pluginOptions.AgePlugin {
 	case "recipient-v1":
 		plugin.Log.Println("Got recipient-v1")
@@ -237,6 +256,8 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 
 	flags.BoolVarP(&pluginOptions.Generate, "generate", "g", false, "Generate a identity.")
 	flags.BoolVarP(&pluginOptions.PIN, "pin", "p", false, "Include a pin with the key. Alternatively export AGE_TPM_PIN.")
+	flags.StringVar(&pluginOptions.SRKHandle, "srk-handle", "", "Handle of the persistent SRK (defaults to 0x81000001 or AGE_TPM_SRK_HANDLE).")
+	flags.BoolVar(&pluginOptions.PersistSRK, "persist-srk", false, "Persist the generated SRK to NVRAM at --srk-handle.")
 
 	// Debug or logging stuff
 	flags.StringVar(&pluginOptions.LogFile, "log-file", "", "Logging file for debug output")

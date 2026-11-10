@@ -64,6 +64,18 @@ type handle interface {
 
 // Helper to flush handles
 func FlushHandle(tpm transport.TPM, h handle) {
+	if h == nil {
+		return
+	}
+	switch v := h.(type) {
+	case *tpm2.AuthHandle:
+		if v == nil {
+			return
+		}
+	}
+	if h.HandleValue() >= 0x81000000 && h.HandleValue() <= 0x81FFFFFF {
+		return
+	}
 	flushSrk := tpm2.FlushContext{FlushHandle: h}
 	flushSrk.Execute(tpm)
 }
